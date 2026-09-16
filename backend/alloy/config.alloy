@@ -1,0 +1,37 @@
+// ==============================================================================
+// Grafana Alloy Configuration for Cowrie Honeypot
+// ==============================================================================
+// This configuration replaces the Grafana/Loki pipeline by streaming Cowrie
+// honeypot logs directly into the high-throughput Go SecDash backend.
+//
+// To run Alloy with this config:
+//   alloy run config.alloy
+// ==============================================================================
+
+// 1. Discover Cowrie JSON log files
+local.file_match "cowrie_logs" {
+  path_targets = [{
+    __path__ = "/var/log/cowrie/cowrie.json*",
+    app      = "cowrie",
+    service  = "honeypot",
+  }]
+  sync_period = "5s"
+}
+
+// 2. Tail and read Cowrie logs in real-time
+loki.source.file "cowrie_collector" {
+  targets    = local.file_match.cowrie_logs.targets
+  forward_to = [loki.write.secdash.receiver]
+}
+
+// 3. Forward directly to SecDash Go backend ingestion endpoint
+loki.write "secdash" {
+  endpoint {
+    // Point this to your SecDash backend host and port
+    url = "http://127.0.0.1:8080/api/ingest/loki"
+
+    // Optional batching settings for ultra-high throughput
+    batch_wait = "1s"
+    batch_size = "256KiB"
+  }
+}

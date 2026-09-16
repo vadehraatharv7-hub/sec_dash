@@ -1,0 +1,38 @@
+# Binaries & Go builds
+backend/bin/
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# SQLite honeypot databases, WAL, and journals
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+data/
+backend/data/
+
+# Frontend dependencies & build artifacts
+node_modules/
+frontend/node_modules/
+frontend/dist/
+dist/
+.vite/
+frontend/.vite/
+
+# Environment files & secrets
+.env
+.env.local
+.env.*.local
+*.log
+
+# OS & IDE files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
