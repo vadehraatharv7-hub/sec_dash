@@ -1,5 +1,7 @@
 # SecDash — Enterprise Cowrie Honeypot Threat Operations Center
 
+[![SecDash CI/CD](https://github.com/vadehraatharv7-hub/sec_dash/actions/workflows/ci.yml/badge.svg)](https://github.com/vadehraatharv7-hub/sec_dash/actions/workflows/ci.yml)
+
 A high-performance security dashboard, real-time logstream, and threat intelligence engine designed specifically for **Cowrie SSH/Telnet honeypots**. 
 
 Built with a **Golang backend** for ultra-high throughput (~3.7x higher than FastAPI/Node.js, sub-millisecond query latency) and an enterprise **React 19 + Tailwind CSS** Security Operations Center (SOC) frontend.
