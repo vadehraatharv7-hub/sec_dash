@@ -1,0 +1,135 @@
+name: SecDash CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Go Backend (Lint, Test & Build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+          check-latest: true
+          cache-dependency-path: backend/go.sum
+
+      - name: Verify Go Dependencies
+        run: |
+          go mod verify
+
+      - name: Run Go Vet
+        run: |
+          go vet ./...
+
+      - name: Run Unit Tests
+        run: |
+          go test -v -race ./...
+
+      - name: Build Go Production Binary
+        run: |
+          mkdir -p bin
+          CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/server cmd/server/main.go
+
+      - name: Upload Backend Binary Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: secdash-backend-linux-amd64
+          path: backend/bin/server
+          retention-days: 7
+
+  frontend:
+    name: React Frontend & PWA (Build & Verify)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Dependencies
+        run: |
+          npm ci
+
+      - name: Build Frontend & PWA
+        run: |
+          npm run build
+
+      - name: Validate PWA Artifacts
+        run: |
+          test -f dist/index.html || { echo "Missing dist/index.html"; exit 1; }
+          test -f dist/manifest.webmanifest || { echo "Missing dist/manifest.webmanifest"; exit 1; }
+          test -f dist/sw.js || { echo "Missing dist/sw.js"; exit 1; }
+          test -f dist/icon-192.png || { echo "Missing dist/icon-192.png"; exit 1; }
+          test -f dist/icon-512.png || { echo "Missing dist/icon-512.png"; exit 1; }
+          echo "All PWA assets verified successfully."
+
+      - name: Upload Frontend Dist Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: secdash-frontend-dist
+          path: frontend/dist/
+          retention-days: 7
+
+  package:
+    name: Production Release Bundle
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Download Backend Binary
+        uses: actions/download-artifact@v4
+        with:
+          name: secdash-backend-linux-amd64
+          path: release/backend/bin/
+
+      - name: Download Frontend Bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: secdash-frontend-dist
+          path: release/frontend/dist/
+
+      - name: Prepare Standalone Release Package
+        run: |
+          chmod +x release/backend/bin/server
+          cp secdash.service release/
+          cp -r backend/alloy release/
+          cp dev.sh release/
+          cp Makefile release/
+          cp README.md release/
+          tar -czvf secdash-standalone-linux-amd64.tar.gz -C release .
+
+      - name: Upload Standalone Release Bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: secdash-standalone-linux-amd64
+          path: secdash-standalone-linux-amd64.tar.gz
+          retention-days: 14
