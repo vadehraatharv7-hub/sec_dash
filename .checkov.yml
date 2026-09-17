@@ -1,0 +1,12 @@
+framework:
+  - terraform
+directory:
+  - terraform
+output:
+  - cli
+  - sarif
+output-file-path:
+  - console
+  - checkov-results.sarif
+compact: true
+quiet: false

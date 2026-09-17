@@ -96,9 +96,59 @@ jobs:
           path: frontend/dist/
           retention-days: 7
 
+  terraform-security:
+    name: Terraform Security & Lint (Checkov & TFLint)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.5"
+
+      - name: Terraform Format Check
+        run: |
+          terraform fmt -check -diff
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: latest
+
+      - name: Initialize TFLint
+        run: |
+          tflint --init
+
+      - name: Run TFLint (Azure Ruleset)
+        run: |
+          tflint -f compact
+
+      - name: Run Checkov Security Scanner (NSGs & Public Storage)
+        uses: bridgecrewio/checkov-action@master
+        with:
+          framework: terraform
+          directory: terraform
+          output_format: cli,sarif
+          output_file_path: console,checkov-results.sarif
+          soft_fail: true
+
+      - name: Upload Checkov SARIF Security Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: checkov-security-report
+          path: terraform/checkov-results.sarif
+          retention-days: 14
+
   package:
     name: Production Release Bundle
-    needs: [backend, frontend]
+    needs: [backend, frontend, terraform-security]
     runs-on: ubuntu-latest
 
     steps:
