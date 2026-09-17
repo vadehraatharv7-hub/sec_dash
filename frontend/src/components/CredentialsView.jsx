@@ -14,8 +14,10 @@ export default function CredentialsView({ credentials = [] }) {
   const userMap = {};
   const passMap = {};
   credentials.forEach((c) => {
-    if (c.username) userMap[c.username] = (userMap[c.username] || 0) + c.count;
-    if (c.password) passMap[c.password] = (passMap[c.password] || 0) + c.count;
+    const u = c.username || '';
+    const p = c.password || '';
+    if (u) userMap[u] = (userMap[u] || 0) + (c.count || 1);
+    if (p) passMap[p] = (passMap[p] || 0) + (c.count || 1);
   });
 
   const topUsers = Object.entries(userMap)
@@ -150,17 +152,21 @@ export default function CredentialsView({ credentials = [] }) {
                 <th className="pb-2 text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-850">
+            <tbody className="divide-y divide-slate-855">
               {credentials.map((c, idx) => {
-                const comboKey = `${c.username}:${c.password}`;
+                const username = c.username || '';
+                const password = c.password || '';
+                const comboKey = `${username}:${password}`;
                 const isCopied = copiedKey === comboKey;
-                const isWeak = c.password.length < 8 || !/\d/.test(c.password);
+                const isWeak = password.length < 8 || !/\d/.test(password);
 
                 return (
                   <tr key={idx} className="hover:bg-slate-850/40 transition-colors">
                     <td className="py-2.5 text-slate-500">#{idx + 1}</td>
-                    <td className="py-2.5 font-bold text-amber-300">{c.username}</td>
-                    <td className="py-2.5 font-bold text-rose-300">{c.password}</td>
+                    <td className="py-2.5 font-bold text-amber-300">{username || '<empty>'}</td>
+                    <td className="py-2.5 font-bold text-rose-300">
+                      {password ? password : <span className="text-slate-500 italic font-normal">&lt;empty&gt;</span>}
+                    </td>
                     <td className="py-2.5 text-slate-200 font-bold">{c.count.toLocaleString()}</td>
                     <td className="py-2.5">
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${

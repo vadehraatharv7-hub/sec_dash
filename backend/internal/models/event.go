@@ -99,7 +99,7 @@ type CountryAttackStat struct {
 // CredentialStat represents brute-force username/password frequencies
 type CredentialStat struct {
 	Username  string    `json:"username"`
-	Password  string    `json:"password,omitempty"`
+	Password  string    `json:"password"`
 	Count     int64     `json:"count"`
 	LastSeen  time.Time `json:"last_seen,omitempty"`
 }

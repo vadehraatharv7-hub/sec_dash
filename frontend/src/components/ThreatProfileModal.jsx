@@ -154,7 +154,8 @@ export default function ThreatProfileModal({ ip, onClose }) {
                   <div className="flex flex-wrap gap-1.5">
                     {profile.attempted_creds.map((c, i) => (
                       <span key={i} className="px-2 py-1 rounded bg-slate-950 text-slate-200 border border-slate-800 text-[11px]">
-                        <span className="text-amber-400">{c.username}</span>:<span className="text-rose-400">{c.password}</span>{' '}
+                        <span className="text-amber-400">{c.username || '<empty>'}</span>:
+                        <span className="text-rose-400">{c.password ? c.password : '<empty>'}</span>{' '}
                         <span className="text-slate-500">({c.count}x)</span>
                       </span>
                     ))}

@@ -426,7 +426,7 @@ func (s *Storage) GetTopCredentials(limit int) ([]models.CredentialStat, error) 
 	defer s.lock.RUnlock()
 
 	query := `
-		SELECT username, password, COUNT(*) as cnt
+		SELECT username, COALESCE(password, '') as password, COUNT(*) as cnt
 		FROM credentials
 		WHERE username != ''
 		GROUP BY username, password
@@ -711,7 +711,7 @@ func (s *Storage) GetIPThreatProfile(ip string) (*IPThreatProfile, error) {
 
 	// 2. Credentials attempted
 	credRows, err := s.db.Query(`
-		SELECT username, password, COUNT(*) as cnt
+		SELECT username, COALESCE(password, ''), COUNT(*) as cnt
 		FROM credentials
 		WHERE src_ip = ?
 		GROUP BY username, password

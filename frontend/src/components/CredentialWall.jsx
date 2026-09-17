@@ -12,7 +12,7 @@ export default function CredentialWall({ credentials = [] }) {
   };
 
   const handleExportWordlist = () => {
-    const lines = credentials.map((c) => `${c.username}:${c.password}`);
+    const lines = credentials.map((c) => `${c.username || ''}:${c.password || ''}`);
     const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -25,10 +25,9 @@ export default function CredentialWall({ credentials = [] }) {
   const filteredCreds = credentials.filter((c) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
-    return (
-      c.username.toLowerCase().includes(q) ||
-      c.password.toLowerCase().includes(q)
-    );
+    const u = (c.username || '').toLowerCase();
+    const p = (c.password || '').toLowerCase();
+    return u.includes(q) || p.includes(q);
   });
 
   const totalAttempts = credentials.reduce((sum, c) => sum + c.count, 0) || 1;
@@ -37,8 +36,10 @@ export default function CredentialWall({ credentials = [] }) {
   const userFreq = {};
   const passFreq = {};
   credentials.forEach((c) => {
-    if (c.username) userFreq[c.username] = (userFreq[c.username] || 0) + c.count;
-    if (c.password) passFreq[c.password] = (passFreq[c.password] || 0) + c.count;
+    const u = c.username || '';
+    const p = c.password || '';
+    if (u) userFreq[u] = (userFreq[u] || 0) + (c.count || 1);
+    if (p) passFreq[p] = (passFreq[p] || 0) + (c.count || 1);
   });
 
   const topUsers = Object.entries(userFreq)
@@ -176,21 +177,23 @@ export default function CredentialWall({ credentials = [] }) {
             </thead>
             <tbody className="divide-y divide-slate-850">
               {filteredCreds.map((c, idx) => {
-                const key = `${c.username}:${c.password}`;
+                const username = c.username || '';
+                const password = c.password || '';
+                const key = `${username}:${password}`;
                 const isCopied = copiedKey === key;
-                const isTrivial = c.password.length <= 6 || /^(123456|password|admin|root|1234)$/i.test(c.password);
+                const isTrivial = password.length <= 6 || /^(123456|password|admin|root|1234)$/i.test(password);
 
                 return (
                   <tr key={idx} className="hover:bg-slate-900/50 transition-colors">
                     <td className="py-2.5 px-4 text-slate-500">#{idx + 1}</td>
                     <td className="py-2.5 px-4">
                       <span className="bg-slate-950 px-2 py-0.5 rounded border border-slate-800 text-amber-300 font-bold">
-                        {c.username}
+                        {username || '<empty>'}
                       </span>
                     </td>
                     <td className="py-2.5 px-4">
                       <span className="bg-slate-950 px-2 py-0.5 rounded border border-slate-800 text-rose-300 font-bold">
-                        {c.password}
+                        {password ? password : <span className="text-slate-500 italic font-normal">&lt;empty&gt;</span>}
                       </span>
                     </td>
                     <td className="py-2.5 px-4 font-bold text-slate-200">
