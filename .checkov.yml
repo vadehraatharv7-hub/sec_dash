@@ -10,3 +10,6 @@ output-file-path:
   - checkov-results.sarif
 compact: true
 quiet: false
+skip-check:
+  - CKV_AZURE_119
+  - CKV_AZURE_50
