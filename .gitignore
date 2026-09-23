@@ -36,3 +36,14 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Terraform state and secrets
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+*.tfvars
+secrets/
+*.pem
+*.key
+
