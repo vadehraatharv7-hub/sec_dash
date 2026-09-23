@@ -93,6 +93,7 @@ func (s *Server) Routes() http.Handler {
 		r.Get("/threats/files", s.handleGetMalwareFiles)
 		r.Get("/loot", s.handleGetMalwareFiles)
 		r.Get("/threats/ip/{ip}", s.handleGetThreatIPProfile)
+		r.Post("/threats/ip/{ip}/ban", s.handleBanIP)
 
 		// Custom Webhook Alerting Engine
 		r.Get("/webhooks", s.handleListWebhooks)
@@ -543,4 +544,29 @@ func respondJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(data)
+}
+
+func (s *Server) handleBanIP(w http.ResponseWriter, r *http.Request) {
+	ip := chi.URLParam(r, "ip")
+	if ip == "" {
+		http.Error(w, "IP address required", http.StatusBadRequest)
+		return
+	}
+	
+	// Read reason from request body
+	var req struct {
+		Reason string `json:"reason"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	if req.Reason == "" {
+		req.Reason = "Manual ban from SecDash UI"
+	}
+
+	err := s.storage.BanIP(ip, req.Reason)
+	if err != nil {
+		http.Error(w, "Failed to ban IP: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]string{"status": "success", "ip": ip, "reason": req.Reason})
 }

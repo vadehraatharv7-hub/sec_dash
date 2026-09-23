@@ -196,3 +196,13 @@ export function createAttackStream(onEvent, onStatusChange) {
     },
   };
 }
+
+export async function banThreatIP(ip, reason) {
+  const res = await fetch(`${API_BASE}/threats/ip/${ip}/ban`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ reason })
+  });
+  if (!res.ok) throw new Error('Failed to ban IP');
+  return res.json();
+}

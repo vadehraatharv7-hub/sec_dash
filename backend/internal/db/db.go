@@ -139,6 +139,12 @@ func (s *Storage) initSchema() error {
 
 	CREATE INDEX IF NOT EXISTS idx_malware_sha ON malware(sha256);
 
+	CREATE TABLE IF NOT EXISTS banned_ips (
+		ip TEXT PRIMARY KEY,
+		reason TEXT,
+		banned_at DATETIME
+	);
+
 	CREATE TABLE IF NOT EXISTS webhooks (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		name TEXT NOT NULL,
@@ -655,6 +661,7 @@ type IPThreatProfile struct {
 	AttemptedCreds   []models.CredentialStat `json:"attempted_creds"`
 	ExecutedCommands []string             `json:"executed_commands"`
 	ClientBanners    []string             `json:"client_banners"`
+	IsBanned         bool                 `json:"is_banned"`
 }
 
 // GetIPThreatProfile gathers full forensics for an attacker IP
@@ -778,6 +785,10 @@ func (s *Storage) GetIPThreatProfile(ip string) (*IPThreatProfile, error) {
 		score = 100
 	}
 	profile.ThreatScore = score
+
+	var banCount int
+	_ = s.db.QueryRow(`SELECT COUNT(*) FROM banned_ips WHERE ip = ?`, ip).Scan(&banCount)
+	profile.IsBanned = banCount > 0
 
 	return profile, nil
 }
@@ -1071,3 +1082,26 @@ func parseFlexibleTime(s string) time.Time {
 }
 
 
+
+// BanIP adds an IP to the active blocklist
+func (s *Storage) BanIP(ip string, reason string) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	_, err := s.db.Exec(`
+		INSERT INTO banned_ips (ip, reason, banned_at)
+		VALUES (?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(ip) DO UPDATE SET reason = excluded.reason, banned_at = CURRENT_TIMESTAMP
+	`, ip, reason)
+	return err
+}
+
+// IsIPBanned checks if an IP is on the blocklist
+func (s *Storage) IsIPBanned(ip string) (bool, error) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	var count int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM banned_ips WHERE ip = ?`, ip).Scan(&count)
+	return count > 0, err
+}

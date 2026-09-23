@@ -11,13 +11,27 @@ import {
   Copy, 
   AlertTriangle 
 } from 'lucide-react';
-import { fetchIPProfile } from '../utils/api';
+import { fetchIPProfile, banThreatIP } from '../utils/api';
 
 export default function ThreatProfileModal({ ip, onClose }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [banning, setBanning] = useState(false);
+
+  const handleBan = async () => {
+    try {
+      setBanning(true);
+      await banThreatIP(ip, "Manual Ban from SOC Dashboard");
+      setProfile(prev => ({ ...prev, is_banned: true }));
+    } catch (err) {
+      console.error(err);
+      alert("Failed to ban IP");
+    } finally {
+      setBanning(false);
+    }
+  };
 
   useEffect(() => {
     if (!ip) return;
@@ -61,12 +75,27 @@ export default function ThreatProfileModal({ ip, onClose }) {
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-3">
+            {profile?.is_banned ? (
+              <span className="px-2 py-1 text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded uppercase tracking-wider">
+                Banned
+              </span>
+            ) : (
+              <button
+                onClick={handleBan}
+                disabled={banning || !profile}
+                className="px-3 py-1.5 text-[11px] font-bold bg-rose-600 hover:bg-rose-500 text-white rounded shadow-sm shadow-rose-900/20 transition-all disabled:opacity-50"
+              >
+                {banning ? 'Banning...' : 'Ban IP'}
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         {/* Modal Body */}
