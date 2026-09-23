@@ -1,7 +1,6 @@
 variable "admin_public_ip" {
   type        = string
   description = "Allowed administrative public IP address for SSH and management access"
-  default     = "127.0.0.1"
 
   validation {
     condition     = can(regex("^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}$", var.admin_public_ip))
