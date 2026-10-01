@@ -45,15 +45,15 @@ export default function AlloyGuideView() {
         </div>
 
         <p className="text-xs font-mono text-slate-300 mb-6 leading-relaxed">
-          Grafana Alloy is a telemetry collector that natively tails your Cowrie honeypot JSON logs and forwards them. 
+          Grafana Alloy is a telemetry collector that natively tails your honeypot JSON logs and forwards them. 
           By redirecting Alloy’s <code className="text-cyan-400 bg-slate-950 px-1 py-0.5 rounded border border-slate-800">loki.write</code> endpoint to SecDash’s Go backend, you eliminate Grafana/Loki server overhead while achieving ~3.7x higher ingestion throughput and sub-millisecond real-time attack streaming.
         </p>
 
         {/* Visual Architecture Flow */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-center font-mono text-xs">
           <div className="p-4 rounded-lg bg-slate-950 border border-slate-800 flex flex-col items-center justify-center">
-            <span className="text-amber-400 font-bold mb-1">COWRIE HONEYPOT</span>
-            <span className="text-[11px] text-slate-400">Emits /var/log/cowrie/cowrie.json</span>
+            <span className="text-amber-400 font-bold mb-1">HONEYPOT SENSORS</span>
+            <span className="text-[11px] text-slate-400">Emits /var/log/cowrie/cowrie.json, etc.</span>
           </div>
 
           <div className="p-4 rounded-lg bg-slate-950 border border-slate-800 flex flex-col items-center justify-center relative">
@@ -120,7 +120,7 @@ export default function AlloyGuideView() {
                 </pre>
               </li>
               <li>
-                <span className="text-slate-100 font-bold">Verify Ingestion</span>: Attacks appearing in Cowrie will now immediately stream into SecDash.
+                <span className="text-slate-100 font-bold">Verify Ingestion</span>: Attacks appearing in the honeypot will now immediately stream into SecDash.
               </li>
             </ol>
           </div>

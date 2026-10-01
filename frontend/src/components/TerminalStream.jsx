@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Terminal, Pause, Play, Trash2, Download, Search, Check, Copy } from 'lucide-react';
+import { Terminal, Pause, Play, Trash2, Download, Search, Check, Copy, Globe, ShieldAlert } from 'lucide-react';
 
 export default function TerminalStream({ events = [] }) {
   const [autoScroll, setAutoScroll] = useState(true);
@@ -33,7 +33,7 @@ export default function TerminalStream({ events = [] }) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `cowrie_audit_${Date.now()}.log`;
+    a.download = `honeypot_audit_${Date.now()}.log`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -121,7 +121,7 @@ export default function TerminalStream({ events = [] }) {
         className="flex-1 p-4 overflow-y-auto text-[11px] leading-relaxed space-y-1 bg-[#060913]"
       >
         <div className="text-slate-600 pb-2 border-b border-slate-900 mb-2">
-          # SecDash Honeypot Live Audit Log Stream initialized. Ready for incoming Alloy / Cowrie events.
+          # SecDash Honeypot Live Audit Log Stream initialized. Ready for incoming Alloy / Sensor events.
         </div>
 
         {filteredEvents.map((ev, idx) => {
@@ -140,10 +140,20 @@ export default function TerminalStream({ events = [] }) {
               key={ev.id || idx}
               className="group flex items-start justify-between gap-3 hover:bg-slate-900/60 p-1 rounded transition-colors"
             >
-              <div className="break-all font-mono">
-                <span className="text-slate-500 mr-2">{ts}</span>
-                <span className={`${sevColor} mr-2`}>[{ev.severity.toUpperCase()}]</span>
-                <span className="text-slate-300 mr-2">[{ev.eventid}]</span>
+              <div className="break-all font-mono flex items-start">
+                <span className="flex-shrink-0 mt-0.5 mr-2" title={`Source: ${ev.honeypot_source || 'unknown'}`}>
+                  {ev.honeypot_source === 'snare' ? (
+                    <Globe className="h-3.5 w-3.5 text-emerald-400" />
+                  ) : ev.honeypot_source === 'cowrie' ? (
+                    <Terminal className="h-3.5 w-3.5 text-cyan-400" />
+                  ) : (
+                    <ShieldAlert className="h-3.5 w-3.5 text-slate-400" />
+                  )}
+                </span>
+                <div>
+                  <span className="text-slate-500 mr-2">{ts}</span>
+                  <span className={`${sevColor} mr-2`}>[{ev.severity.toUpperCase()}]</span>
+                  <span className="text-slate-300 mr-2">[{ev.eventid}]</span>
                 <span className="text-slate-400">src=</span>
                 <span className="text-cyan-300 font-semibold">{ev.src_ip}:{ev.src_port}</span>{' '}
                 <span className="text-slate-400">dst=</span>
@@ -175,6 +185,7 @@ export default function TerminalStream({ events = [] }) {
                     geo=<strong className="text-slate-400">{ev.geo.country_code}</strong>
                   </span>
                 )}
+                </div>
               </div>
 
               <button

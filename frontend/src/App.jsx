@@ -172,7 +172,7 @@ export default function App() {
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
               <CheckCircle2 className="h-3.5 w-3.5" />
-              <span>COWRIE HONEYPOT SENSOR ACTIVE</span>
+              <span>MULTI-SENSOR HONEYPOT ACTIVE</span>
             </div>
             <span className="text-slate-700">|</span>
             <span className="text-slate-400">
@@ -307,7 +307,7 @@ export default function App() {
         <div className="flex flex-wrap items-center justify-between gap-2 max-w-7xl mx-auto">
           <div className="flex items-center gap-2">
             <span className="h-2 w-2 rounded-full bg-cyan-400" />
-            <span className="text-slate-300 font-bold">SecDash Cowrie SOC</span>
+            <span className="text-slate-300 font-bold">SecDash Multi-Sensor SOC</span>
             <span>&bull;</span>
             <span>Production Engine (Golang 1.27.1)</span>
           </div>

@@ -40,25 +40,26 @@ type GeoLocation struct {
 
 // EnrichedEvent represents a normalized, geo-enriched event ready for querying and UI streaming
 type EnrichedEvent struct {
-	ID          int64       `json:"id"`
-	EventID     string      `json:"eventid"`
-	Timestamp   time.Time   `json:"timestamp"`
-	Session     string      `json:"session"`
-	SourceIP    string      `json:"src_ip"`
-	SourcePort  int         `json:"src_port"`
-	DestPort    int         `json:"dst_port"`
-	Protocol    string      `json:"protocol"`
-	Username    string      `json:"username,omitempty"`
-	Password    string      `json:"password,omitempty"`
-	Input       string      `json:"input,omitempty"`
-	SSHVersion  string      `json:"ssh_version,omitempty"`
-	DownloadURL string      `json:"download_url,omitempty"`
-	SHA256      string      `json:"sha256,omitempty"`
-	FileSize    int64       `json:"file_size,omitempty"`
-	Duration    float64     `json:"duration,omitempty"`
-	Geo         GeoLocation `json:"geo"`
-	Severity    string      `json:"severity"` // "info", "warning", "high", "critical"
-	Description string      `json:"description"`
+	ID             int64       `json:"id"`
+	EventID        string      `json:"eventid"`
+	HoneypotSource string      `json:"honeypot_source"`
+	Timestamp      time.Time   `json:"timestamp"`
+	Session        string      `json:"session"`
+	SourceIP       string      `json:"src_ip"`
+	SourcePort     int         `json:"src_port"`
+	DestPort       int         `json:"dst_port"`
+	Protocol       string      `json:"protocol"`
+	Username       string      `json:"username,omitempty"`
+	Password       string      `json:"password,omitempty"`
+	Input          string      `json:"input,omitempty"`
+	SSHVersion     string      `json:"ssh_version,omitempty"`
+	DownloadURL    string      `json:"download_url,omitempty"`
+	SHA256         string      `json:"sha256,omitempty"`
+	FileSize       int64       `json:"file_size,omitempty"`
+	Duration       float64     `json:"duration,omitempty"`
+	Geo            GeoLocation `json:"geo"`
+	Severity       string      `json:"severity"` // "info", "warning", "high", "critical"
+	Description    string      `json:"description"`
 }
 
 // LokiPushRequest represents the payload structure sent by Grafana Alloy (loki.write)

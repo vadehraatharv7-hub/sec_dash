@@ -61,7 +61,7 @@ export default function AttackMap({ countries = [], recentAttacks = [], onSelect
     sensorMarker.bindPopup(`
       <div style="font-family:monospace; font-size:11px; line-height:1.4;">
         <div style="color:#38bdf8; font-weight:bold; border-bottom:1px solid #334155; padding-bottom:4px; margin-bottom:4px;">
-          COWRIE HONEYPOT SENSOR #1
+          HONEYPOT SENSORS ONLINE
         </div>
         <div style="color:#94a3b8;">Location: Frankfurt, Germany (EU-West)</div>
         <div style="color:#94a3b8;">Status: <span style="color:#4ade80; font-weight:bold;">ACTIVE LISTENING</span></div>

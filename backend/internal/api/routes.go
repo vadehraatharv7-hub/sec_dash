@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -13,27 +12,28 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/redis/go-redis/v9"
 	"sec_dash/backend/internal/ai"
 	"sec_dash/backend/internal/alerts"
 	"sec_dash/backend/internal/db"
-	"sec_dash/backend/internal/ingest"
+	
 	"sec_dash/backend/internal/killchain"
 	"sec_dash/backend/internal/models"
 )
 
 type Server struct {
 	storage   *db.Storage
-	parser    *ingest.Parser
+	
 	hub       *Hub
 	analyst   *ai.Analyst
 	alerts    *alerts.Engine
 	startTime time.Time
 }
 
-func NewServer(storage *db.Storage, parser *ingest.Parser, hub *Hub) *Server {
+func NewServer(storage *db.Storage, hub *Hub) *Server {
 	return &Server{
 		storage:   storage,
-		parser:    parser,
+		
 		hub:       hub,
 		analyst:   ai.NewAnalyst(storage),
 		alerts:    alerts.NewEngine(storage),
@@ -69,12 +69,9 @@ func (s *Server) Routes() http.Handler {
 		r.Get("/health", s.handleHealth)
 
 		// Ingestion endpoints
-		r.Post("/ingest/cowrie", s.handleIngestCowrie)
-		r.Post("/ingest/loki", s.handleIngestLoki)
-		r.Post("/ingest/raw", s.handleIngestRaw)
-		// Standard Loki API alias so Grafana Alloy can point directly without custom path changes:
-		r.Post("/loki/api/v1/push", s.handleIngestLoki)
-
+		r.Post("/ingest/stream", s.handleIngestStream)
+								// Standard Loki API alias so Grafana Alloy can point directly without custom path changes:
+		
 		// Dashboard analytics & Threat intelligence
 		r.Get("/stats/overview", s.handleStatsOverview)
 		r.Get("/stats/timeline", s.handleStatsTimeline)
@@ -143,63 +140,11 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleIngestCowrie handles native Cowrie JSON or JSON array/stream
-func (s *Server) handleIngestCowrie(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "Failed to read body", http.StatusBadRequest)
-		return
-	}
-	defer r.Body.Close()
+func (s *Server) handleIngestCowrie(w http.ResponseWriter, r *http.Request) {}
 
-	events, err := s.parser.ParseAutoBatch(body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
+func (s *Server) handleIngestLoki(w http.ResponseWriter, r *http.Request) {}
 
-	if err := s.storage.InsertEventsBatch(events); err != nil {
-		http.Error(w, "Failed to persist events: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	for _, ev := range events {
-		s.hub.BroadcastEvent(ev)
-		s.alerts.EvaluateAndDispatch(ev)
-	}
-
-	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"ingested": len(events),
-		"status":   "success",
-	})
-}
-
-// handleIngestLoki handles Grafana Alloy loki.write format
-func (s *Server) handleIngestLoki(w http.ResponseWriter, r *http.Request) {
-	defer r.Body.Close()
-	events, err := s.parser.ParseLokiPush(r.Body)
-	if err != nil {
-		// Fallback to auto-batch if not pure Loki JSON
-		http.Error(w, "Invalid loki payload: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if err := s.storage.InsertEventsBatch(events); err != nil {
-		http.Error(w, "Failed to store batch: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	for _, ev := range events {
-		s.hub.BroadcastEvent(ev)
-		s.alerts.EvaluateAndDispatch(ev)
-	}
-
-	// Grafana Alloy expects 204 No Content or 200 OK
-	w.WriteHeader(http.StatusNoContent)
-}
-
-func (s *Server) handleIngestRaw(w http.ResponseWriter, r *http.Request) {
-	s.handleIngestCowrie(w, r)
-}
+func (s *Server) handleIngestRaw(w http.ResponseWriter, r *http.Request) {}
 
 func (s *Server) handleStatsOverview(w http.ResponseWriter, r *http.Request) {
 	stats, err := s.storage.GetOverviewStats()
@@ -513,32 +458,7 @@ func (s *Server) handleListWebhookLogs(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, logs)
 }
 
-func (s *Server) handleAlloyConfig(w http.ResponseWriter, r *http.Request) {
-	cfg := `// Grafana Alloy Configuration for Cowrie Honeypot
-// Direct ingestion into SecDash Go Backend (replaces Grafana/Loki pipeline)
-
-local.file_match "cowrie_logs" {
-  path_targets = [{
-    __path__ = "/var/log/cowrie/cowrie.json*",
-  }]
-  sync_period = "5s"
-}
-
-loki.source.file "cowrie_collector" {
-  targets    = local.file_match.cowrie_logs.targets
-  forward_to = [loki.write.secdash.receiver]
-}
-
-loki.write "secdash" {
-  endpoint {
-    url = "http://localhost:8080/api/ingest/loki"
-  }
-}
-`
-	respondJSON(w, http.StatusOK, map[string]string{
-		"config": cfg,
-	})
-}
+func (s *Server) handleAlloyConfig(w http.ResponseWriter, r *http.Request) {}
 
 func respondJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
@@ -568,5 +488,64 @@ func (s *Server) handleBanIP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Publish to Redis ban_feed
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: "localhost:6379",
+	})
+	defer redisClient.Close()
+	if err := redisClient.Publish(r.Context(), "ban_feed", ip).Err(); err != nil {
+		log.Printf("Failed to publish banned IP to Redis: %v", err)
+	} else {
+		log.Printf("Published banned IP %s to Redis ban_feed", ip)
+	}
+
 	respondJSON(w, http.StatusOK, map[string]string{"status": "success", "ip": ip, "reason": req.Reason})
+}
+
+func (s *Server) handleIngestStream(w http.ResponseWriter, r *http.Request) {
+	var payload map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "Invalid JSON payload: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	var ev models.EnrichedEvent
+
+	if v, ok := payload["eventid"].(string); ok { ev.EventID = v }
+	if v, ok := payload["session"].(string); ok { ev.Session = v }
+	if v, ok := payload["src_ip"].(string); ok { ev.SourceIP = v }
+	if v, ok := payload["protocol"].(string); ok { ev.Protocol = v }
+	
+	switch v := payload["src_port"].(type) {
+	case float64: ev.SourcePort = int(v)
+	}
+	switch v := payload["dst_port"].(type) {
+	case float64: ev.DestPort = int(v)
+	}
+
+	if v, ok := payload["username"].(string); ok { ev.Username = v }
+	if v, ok := payload["password"].(string); ok { ev.Password = v }
+	if v, ok := payload["input"].(string); ok { ev.Input = v }
+	
+	if v, ok := payload["timestamp"].(string); ok {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			ev.Timestamp = t
+		}
+	}
+	if ev.Timestamp.IsZero() {
+		ev.Timestamp = time.Now()
+	}
+
+	if _, ok := payload["eventid"]; ok {
+		ev.HoneypotSource = "cowrie"
+	} else if _, ok := payload["http_request"]; ok {
+		ev.HoneypotSource = "snare"
+	} else {
+		ev.HoneypotSource = "unknown"
+	}
+	
+	s.hub.BroadcastEvent(&ev)
+
+	w.WriteHeader(http.StatusAccepted)
 }

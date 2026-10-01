@@ -56,7 +56,7 @@ export default function Navbar({
               SEC<span className="text-cyan-400">DASH</span>
             </span>
             <span className="text-slate-600 font-mono">/</span>
-            <span className="text-xs font-mono text-slate-400">COWRIE THREAT INTEL</span>
+            <span className="text-xs font-mono text-slate-400">MULTI-SENSOR THREAT INTEL</span>
           </div>
         </div>
 

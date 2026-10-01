@@ -218,7 +218,7 @@ export default function SessionsView({ sessions = [], onSelectIP }) {
 
             <div className="p-4 overflow-y-auto font-mono text-xs space-y-2 bg-[#060913] text-emerald-400 flex-1 min-h-[300px]">
               <div className="text-slate-600 border-b border-slate-900 pb-2">
-                # Intercepted Cowrie SSH Session Stream
+                # Intercepted Honeypot Session Stream
                 <br />
                 # Connected from {activeSession.src_ip} on port 22 ({activeSession.protocol || 'ssh'})
               </div>
