@@ -12,9 +12,13 @@ import (
 
 	"sec_dash/backend/internal/api"
 	"sec_dash/backend/internal/db"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	_ = godotenv.Load()
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
