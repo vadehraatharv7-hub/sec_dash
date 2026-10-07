@@ -2,10 +2,12 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"time"
@@ -69,6 +71,7 @@ func (s *Server) Routes() http.Handler {
 	// API routes
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/health", s.handleHealth)
+		r.Post("/provision", s.handleProvision)
 
 		// Ingestion endpoints
 		r.Post("/ingest/stream", s.handleIngestStream)
@@ -603,4 +606,89 @@ func (s *Server) handleIngestStream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusAccepted)
+}
+
+type ProvisionRequest struct {
+	IP       string `json:"ip"`
+	Username string `json:"username"`
+	RSAKey   string `json:"rsa_key"`
+	Type     string `json:"type"`
+}
+
+type ProvisionResponse struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
+}
+
+func (s *Server) handleProvision(w http.ResponseWriter, r *http.Request) {
+	var req ProvisionRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	if req.IP == "" || req.Username == "" || req.RSAKey == "" || req.Type == "" {
+		http.Error(w, "Missing required fields", http.StatusBadRequest)
+		return
+	}
+	if req.Type != "cowrie" && req.Type != "snare" {
+		http.Error(w, "Invalid type, must be cowrie or snare", http.StatusBadRequest)
+		return
+	}
+
+	keyFile, err := os.CreateTemp("", "prov_rsa_*")
+	if err != nil {
+		http.Error(w, "Failed to create temp key file", http.StatusInternalServerError)
+		return
+	}
+	defer os.Remove(keyFile.Name())
+
+	if err := os.Chmod(keyFile.Name(), 0600); err != nil {
+		http.Error(w, "Failed to set permissions on key file", http.StatusInternalServerError)
+		return
+	}
+	if _, err := keyFile.WriteString(req.RSAKey); err != nil {
+		http.Error(w, "Failed to write key to temp file", http.StatusInternalServerError)
+		return
+	}
+	if err := keyFile.Close(); err != nil {
+		http.Error(w, "Failed to close key file", http.StatusInternalServerError)
+		return
+	}
+
+	invFile, err := os.CreateTemp("", "prov_inv_*")
+	if err != nil {
+		http.Error(w, "Failed to create temp inventory file", http.StatusInternalServerError)
+		return
+	}
+	defer os.Remove(invFile.Name())
+
+	inventoryContent := fmt.Sprintf("[target]\n%s ansible_user=%s ansible_ssh_private_key_file=%s ansible_ssh_common_args='-o StrictHostKeyChecking=no'\n", req.IP, req.Username, keyFile.Name())
+
+	if _, err := invFile.WriteString(inventoryContent); err != nil {
+		http.Error(w, "Failed to write inventory", http.StatusInternalServerError)
+		return
+	}
+	if err := invFile.Close(); err != nil {
+		http.Error(w, "Failed to close inventory file", http.StatusInternalServerError)
+		return
+	}
+
+	playbookPath := "/home/marcos_007/Documents/project/infra_honeypot/ansible/site.yml"
+	tags := fmt.Sprintf("vector,%s", req.Type)
+	cmd := exec.Command("ansible-playbook", playbookPath, "-i", invFile.Name(), "--limit", req.IP, "--tags", tags)
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("Ansible playbook failed: %s\nOutput: %s", err, out)
+		http.Error(w, "Provisioning failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Ansible playbook succeeded\nOutput: %s", out)
+	respondJSON(w, http.StatusOK, ProvisionResponse{
+		Status:  "success",
+		Message: "Provisioning completed successfully",
+	})
 }
