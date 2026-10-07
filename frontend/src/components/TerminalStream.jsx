@@ -38,6 +38,17 @@ export default function TerminalStream({ events = [] }) {
     URL.revokeObjectURL(url);
   };
 
+  
+  const handleBan = async (ip, e) => {
+    e.stopPropagation();
+    try {
+      await banThreatIP(ip, "Fast-ban from Terminal Stream");
+      alert("Banned " + ip);
+    } catch (err) {
+      alert("Failed to ban IP: " + err.message);
+    }
+  };
+
   const handleCopyLine = (text, idx) => {
     navigator.clipboard.writeText(text);
     setCopiedIndex(idx);

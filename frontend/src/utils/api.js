@@ -223,3 +223,17 @@ export async function provisionHoneypot(payload) {
   }
   return res.json();
 }
+
+export async function getBannedIPs() {
+  const res = await fetch(`${API_BASE}/threats/banned`);
+  if (!res.ok) throw new Error('Failed to fetch banned IPs');
+  return res.json();
+}
+
+export async function unbanIP(ip) {
+  const res = await fetch(`${API_BASE}/threats/ip/${encodeURIComponent(ip)}/unban`, {
+    method: 'POST'
+  });
+  if (!res.ok) throw new Error('Failed to unban IP');
+  return true;
+}

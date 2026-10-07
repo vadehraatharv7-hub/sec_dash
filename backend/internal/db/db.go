@@ -585,3 +585,33 @@ func (s *Storage) IsIPBanned(ip string) (bool, error) {
 	count, err := s.db.Collection("banned_ips").CountDocuments(ctx, bson.M{"ip": ip})
 	return count > 0, err
 }
+
+type BannedIP struct {
+	IP       string    `bson:"ip" json:"ip"`
+	Reason   string    `bson:"reason" json:"reason"`
+	BannedAt time.Time `bson:"banned_at" json:"banned_at"`
+}
+
+func (s *Storage) GetBannedIPs() ([]BannedIP, error) {
+	ctx := context.Background()
+	cursor, err := s.db.Collection("banned_ips").Find(ctx, bson.M{})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var results []BannedIP
+	if err := cursor.All(ctx, &results); err != nil {
+		return nil, err
+	}
+	if results == nil {
+		results = []BannedIP{}
+	}
+	return results, nil
+}
+
+func (s *Storage) UnbanIP(ip string) error {
+	ctx := context.Background()
+	_, err := s.db.Collection("banned_ips").DeleteOne(ctx, bson.M{"ip": ip})
+	return err
+}

@@ -114,6 +114,8 @@ func (s *Server) Routes() http.Handler {
 		r.Get("/loot", s.handleGetMalwareFiles)
 		r.Get("/threats/ip/{ip}", s.handleGetThreatIPProfile)
 		r.Post("/threats/ip/{ip}/ban", s.handleBanIP)
+		r.Get("/threats/banned", s.handleGetBanned)
+		r.Post("/threats/ip/{ip}/unban", s.handleUnbanIP)
 
 		// Custom Webhook Alerting Engine
 		r.Get("/webhooks", s.handleListWebhooks)
@@ -742,4 +744,35 @@ func (s *Server) handleProvision(w http.ResponseWriter, r *http.Request) {
 		Status:  "success",
 		Message: "Provisioning completed successfully",
 	})
+}
+
+func (s *Server) handleGetBanned(w http.ResponseWriter, r *http.Request) {
+	ips, err := s.storage.GetBannedIPs()
+	if err != nil {
+		http.Error(w, "Failed to get banned IPs", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(ips)
+}
+
+func (s *Server) handleUnbanIP(w http.ResponseWriter, r *http.Request) {
+	ip := chi.URLParam(r, "ip")
+	if ip == "" {
+		http.Error(w, "IP address required", http.StatusBadRequest)
+		return
+	}
+
+	err := s.storage.UnbanIP(ip)
+	if err != nil {
+		http.Error(w, "Failed to unban IP: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Publish unban to Redis
+	if s.hub != nil && s.hub.broker != nil {
+		_ = s.hub.broker.PublishBan(r.Context(), ip, 0) // duration 0 means unban/whitelist
+	}
+
+	w.WriteHeader(http.StatusAccepted)
 }

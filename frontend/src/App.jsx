@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import ProvisionHoneypot from './components/ProvisionHoneypot';
+import AccessControl from './components/AccessControl';
 import VelocityMetrics from './components/VelocityMetrics';
 import AttackMap from './components/AttackMap';
 import AttackTimeline from './components/AttackTimeline';
@@ -26,7 +27,7 @@ import {
 } from './utils/api';
 
 import { 
-  ShieldCheck, 
+  ShieldCheck, Shield, 
   Terminal, 
   Server, 
   CheckCircle2, 
@@ -287,6 +288,11 @@ export default function App() {
         {/* 9. Custom Webhook Alerting Engine */}
         {activeTab === 'alerts' && (
           <AlertsView />
+        )}
+
+        {/* Access Control (Ban/Whitelist) */}
+        {activeTab === 'access' && (
+          <AccessControl />
         )}
 
         {/* Grafana Alloy Pipeline Guide */}
