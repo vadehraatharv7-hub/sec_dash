@@ -78,7 +78,7 @@ func (s *Storage) GetRecentEvents(limit int, eventFilter, ipFilter string) ([]*m
 		filter["src_ip"] = ipFilter
 	}
 
-	opts := options.Find().SetSort(bson.D{{"timestamp", -1}}).SetLimit(int64(limit))
+	opts := options.Find().SetLimit(int64(limit))
 	cursor, err := s.db.Collection("logs").Find(ctx, filter, opts)
 	if err != nil {
 		return nil, err
@@ -475,7 +475,7 @@ func (s *Storage) GetBotnetFingerprints(limit int) ([]models.BotnetFingerprint, 
 
 func (s *Storage) GetSessionEvents(sessionID string) ([]*models.EnrichedEvent, error) {
 	ctx := context.Background()
-	opts := options.Find().SetSort(bson.D{{"timestamp", 1}})
+	opts := options.Find()
 	cursor, err := s.db.Collection("logs").Find(ctx, bson.M{"session": sessionID}, opts)
 	if err != nil {
 		return nil, err
