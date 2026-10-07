@@ -128,9 +128,43 @@ func (s *Storage) GetOverviewStats() (*models.OverviewStats, error) {
 	ctx := context.Background()
 	total, _ := s.db.Collection("logs").CountDocuments(ctx, bson.M{})
 	failed, _ := s.db.Collection("logs").CountDocuments(ctx, bson.M{"eventid": "cowrie.login.failed"})
+	success, _ := s.db.Collection("logs").CountDocuments(ctx, bson.M{"eventid": "cowrie.login.success"})
+	cmds, _ := s.db.Collection("logs").CountDocuments(ctx, bson.M{"eventid": "cowrie.command.input"})
+	files, _ := s.db.Collection("logs").CountDocuments(ctx, bson.M{"eventid": "cowrie.session.file_download"})
+	
+	uniqueIPs, _ := s.db.Collection("logs").Distinct(ctx, "src_ip", bson.M{})
+	uniqueASNs, _ := s.db.Collection("logs").Distinct(ctx, "geo.asn", bson.M{})
+	
+	compRatio := 0.0
+	if (success + failed) > 0 {
+		compRatio = (float64(success) / float64(success + failed)) * 100.0
+	}
+	
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"duration": bson.M{"$gt": 0}}}},
+		{{Key: "$group", Value: bson.M{"_id": nil, "avgDuration": bson.M{"$avg": "$duration"}}}},
+	}
+	cursor, _ := s.db.Collection("logs").Aggregate(ctx, pipeline)
+	avgDuration := 0.0
+	if cursor != nil && cursor.Next(ctx) {
+		var res struct {
+			AvgDuration float64 `bson:"avgDuration"`
+		}
+		cursor.Decode(&res)
+		avgDuration = res.AvgDuration
+		cursor.Close(ctx)
+	}
+
 	return &models.OverviewStats{
 		TotalEvents: total,
 		FailedLogins: failed,
+		SuccessfulLogins: success,
+		CommandsExecuted: cmds,
+		FilesCaptured: files,
+		UniqueAttackers: int64(len(uniqueIPs)),
+		UniqueASNs: int64(len(uniqueASNs)),
+		CompromiseRatio: compRatio,
+		AvgSessionDuration: avgDuration,
 	}, nil
 }
 
@@ -434,9 +468,9 @@ func (s *Storage) GetIPThreatProfile(ip string) (*IPThreatProfile, error) {
 func (s *Storage) GetBotnetFingerprints(limit int) ([]models.BotnetFingerprint, error) {
 	ctx := context.Background()
 	pipeline := mongo.Pipeline{
-		{{Key: "$match", Value: bson.M{"ssh_version": bson.M{"$ne": ""}}}},
+		{{Key: "$match", Value: bson.M{"sshversion": bson.M{"$ne": ""}}}},
 		{{Key: "$group", Value: bson.M{
-			"_id": "$ssh_version",
+			"_id": "$sshversion",
 			"count": bson.M{"$sum": 1},
 			"first_seen": bson.M{"$min": "$timestamp"},
 			"last_seen": bson.M{"$max": "$timestamp"},

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
+import ProvisionHoneypot from './components/ProvisionHoneypot';
 import VelocityMetrics from './components/VelocityMetrics';
 import AttackMap from './components/AttackMap';
 import AttackTimeline from './components/AttackTimeline';
@@ -289,6 +290,11 @@ export default function App() {
         )}
 
         {/* Grafana Alloy Pipeline Guide */}
+        {/* Remote Honeypot Provisioning */}
+        {activeTab === 'provision' && (
+          <ProvisionHoneypot />
+        )}
+
         {activeTab === 'alloy' && (
           <AlloyGuideView />
         )}

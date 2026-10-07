@@ -206,3 +206,20 @@ export async function banThreatIP(ip, reason) {
   if (!res.ok) throw new Error('Failed to ban IP');
   return res.json();
 }
+
+export async function provisionHoneypot(payload) {
+  const res = await fetch(`${API_BASE}/provision`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    let err = 'Provisioning failed';
+    try {
+      const data = await res.json();
+      err = data.error || err;
+    } catch(e) {}
+    throw new Error(err);
+  }
+  return res.json();
+}

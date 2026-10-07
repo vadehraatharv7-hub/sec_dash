@@ -549,6 +549,29 @@ func (s *Server) handleIngestStream(w http.ResponseWriter, r *http.Request) {
 		}
 		if v, ok := payload["src_ip"].(string); ok {
 			ev.SourceIP = v
+			// Perform quick GeoIP lookup
+			resp, err := http.Get("http://ip-api.com/json/" + v)
+			if err == nil {
+				defer resp.Body.Close()
+				var geo struct {
+					CountryCode string  `json:"countryCode"`
+					CountryName string  `json:"country"`
+					City        string  `json:"city"`
+					Lat         float64 `json:"lat"`
+					Lon         float64 `json:"lon"`
+					Asn         string  `json:"as"`
+					Org         string  `json:"org"`
+				}
+				if json.NewDecoder(resp.Body).Decode(&geo) == nil {
+					ev.Geo.CountryCode = geo.CountryCode
+					ev.Geo.CountryName = geo.CountryName
+					ev.Geo.City = geo.City
+					ev.Geo.Latitude = geo.Lat
+					ev.Geo.Longitude = geo.Lon
+					ev.Geo.ASN = geo.Asn
+					ev.Geo.Org = geo.Org
+				}
+			}
 		}
 		if v, ok := payload["protocol"].(string); ok {
 			ev.Protocol = v
@@ -571,6 +594,18 @@ func (s *Server) handleIngestStream(w http.ResponseWriter, r *http.Request) {
 		}
 		if v, ok := payload["input"].(string); ok {
 			ev.Input = v
+		}
+		if v, ok := payload["version"].(string); ok {
+			ev.SSHVersion = v
+		}
+		if v, ok := payload["url"].(string); ok {
+			ev.DownloadURL = v
+		}
+		if v, ok := payload["shasum"].(string); ok {
+			ev.SHA256 = v
+		}
+		if v, ok := payload["size"].(float64); ok {
+			ev.FileSize = int64(v)
 		}
 
 		if v, ok := payload["timestamp"].(string); ok {
