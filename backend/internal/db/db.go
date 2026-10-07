@@ -31,7 +31,19 @@ func NewStorage(mongoURI string) (*Storage, error) {
 		return nil, fmt.Errorf("failed to ping mongodb: %w", err)
 	}
 
+
 	database := client.Database("honeypot_db")
+
+	// Ensure indexes for Cosmos DB sorting
+	indexCtx, cancelIndex := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelIndex()
+	_, err = database.Collection("logs").Indexes().CreateOne(indexCtx, mongo.IndexModel{
+		Keys: bson.D{{"timestamp", -1}},
+	})
+	if err != nil {
+		fmt.Printf("Warning: Failed to create index on timestamp: %v\n", err)
+	}
+
 
 	return &Storage{
 		client: client,
