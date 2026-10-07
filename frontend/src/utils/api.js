@@ -237,3 +237,9 @@ export async function unbanIP(ip) {
   if (!res.ok) throw new Error('Failed to unban IP');
   return true;
 }
+
+export async function fetchTopIPs(limit = 10) {
+  const res = await fetch(`${API_BASE}/stats/ips?limit=${limit}`);
+  if (!res.ok) throw new Error('Failed to fetch top IPs');
+  return res.json();
+}

@@ -615,3 +615,36 @@ func (s *Storage) UnbanIP(ip string) error {
 	_, err := s.db.Collection("banned_ips").DeleteOne(ctx, bson.M{"ip": ip})
 	return err
 }
+
+type IPStat struct {
+	IP          string `bson:"_id" json:"ip"`
+	Count       int64  `bson:"count" json:"count"`
+	CountryCode string `bson:"country_code" json:"country_code"`
+}
+
+func (s *Storage) GetTopIPs(limit int) ([]IPStat, error) {
+	ctx := context.Background()
+	pipeline := mongo.Pipeline{
+		{{Key: "$group", Value: bson.M{
+			"_id":          "$src_ip",
+			"count":        bson.M{"$sum": 1},
+			"country_code": bson.M{"$first": "$geo.country_code"},
+		}}},
+		{{Key: "$sort", Value: bson.M{"count": -1}}},
+		{{Key: "$limit", Value: limit}},
+	}
+	cursor, err := s.db.Collection("logs").Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var results []IPStat
+	if err := cursor.All(ctx, &results); err != nil {
+		return nil, err
+	}
+	if results == nil {
+		results = []IPStat{}
+	}
+	return results, nil
+}

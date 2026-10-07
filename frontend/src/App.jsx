@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import ProvisionHoneypot from './components/ProvisionHoneypot';
 import AccessControl from './components/AccessControl';
+import TopIPs from './components/TopIPs';
 import VelocityMetrics from './components/VelocityMetrics';
 import AttackMap from './components/AttackMap';
 import AttackTimeline from './components/AttackTimeline';
@@ -19,7 +20,8 @@ import {
   fetchTimeline, 
   fetchTopCountries, 
   fetchTopCredentials, 
-  fetchTopCommands, 
+  fetchTopCommands,
+  fetchTopIPs, 
   fetchEvents, 
   fetchSessions, 
   fetchMalwareFiles, 
@@ -47,6 +49,7 @@ export default function App() {
   const [timeline, setTimeline] = useState([]);
   const [countries, setCountries] = useState([]);
   const [credentials, setCredentials] = useState([]);
+  const [topIPs, setTopIPs] = useState([]);
   const [commands, setCommands] = useState([]);
   const [events, setEvents] = useState([]);
   const [sessions, setSessions] = useState([]);
