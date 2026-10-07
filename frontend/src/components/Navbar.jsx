@@ -1,7 +1,8 @@
 import React from 'react';
 import { 
   ShieldAlert, 
-  Activity, 
+  Activity,
+  Shield, 
   Terminal, 
   KeyRound, 
   TerminalSquare, 
