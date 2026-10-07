@@ -29,13 +29,13 @@ type CowrieRawEvent struct {
 
 // GeoLocation holds geographical metadata for an IP
 type GeoLocation struct {
-	CountryCode string  `json:"country_code"`
-	CountryName string  `json:"country_name"`
-	City        string  `json:"city"`
-	Latitude    float64 `json:"latitude"`
-	Longitude   float64 `json:"longitude"`
-	ASN         string  `json:"asn,omitempty"`
-	Org         string  `json:"org,omitempty"`
+	CountryCode string  `json:"country_code" bson:"country_code"`
+	CountryName string  `json:"country_name" bson:"country_name"`
+	City        string  `json:"city" bson:"city"`
+	Latitude    float64 `json:"latitude" bson:"latitude"`
+	Longitude   float64 `json:"longitude" bson:"longitude"`
+	ASN         string  `json:"asn,omitempty" bson:"asn,omitempty"`
+	Org         string  `json:"org,omitempty" bson:"org,omitempty"`
 }
 
 // EnrichedEvent represents a normalized, geo-enriched event ready for querying and UI streaming
@@ -90,11 +90,11 @@ type OverviewStats struct {
 
 // CountryAttackStat represents aggregated attack counts by country
 type CountryAttackStat struct {
-	CountryCode string  `json:"country_code"`
-	CountryName string  `json:"country_name"`
+	CountryCode string  `json:"country_code" bson:"country_code"`
+	CountryName string  `json:"country_name" bson:"country_name"`
 	Count       int64   `json:"count"`
-	Latitude    float64 `json:"latitude"`
-	Longitude   float64 `json:"longitude"`
+	Latitude    float64 `json:"latitude" bson:"latitude"`
+	Longitude   float64 `json:"longitude" bson:"longitude"`
 }
 
 // CredentialStat represents brute-force username/password frequencies
