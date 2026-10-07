@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -9,21 +10,22 @@ import (
 	"strconv"
 	"time"
 
+	"sec_dash/backend/internal/ai"
+	"sec_dash/backend/internal/alerts"
+	"sec_dash/backend/internal/db"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/redis/go-redis/v9"
-	"sec_dash/backend/internal/ai"
-	"sec_dash/backend/internal/alerts"
-	"sec_dash/backend/internal/db"
-	
+
 	"sec_dash/backend/internal/killchain"
 	"sec_dash/backend/internal/models"
 )
 
 type Server struct {
-	storage   *db.Storage
-	
+	storage *db.Storage
+
 	hub       *Hub
 	analyst   *ai.Analyst
 	alerts    *alerts.Engine
@@ -32,8 +34,8 @@ type Server struct {
 
 func NewServer(storage *db.Storage, hub *Hub) *Server {
 	return &Server{
-		storage:   storage,
-		
+		storage: storage,
+
 		hub:       hub,
 		analyst:   ai.NewAnalyst(storage),
 		alerts:    alerts.NewEngine(storage),
@@ -70,8 +72,8 @@ func (s *Server) Routes() http.Handler {
 
 		// Ingestion endpoints
 		r.Post("/ingest/stream", s.handleIngestStream)
-								// Standard Loki API alias so Grafana Alloy can point directly without custom path changes:
-		
+		// Standard Loki API alias so Grafana Alloy can point directly without custom path changes:
+
 		// Dashboard analytics & Threat intelligence
 		r.Get("/stats/overview", s.handleStatsOverview)
 		r.Get("/stats/timeline", s.handleStatsTimeline)
@@ -472,7 +474,7 @@ func (s *Server) handleBanIP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "IP address required", http.StatusBadRequest)
 		return
 	}
-	
+
 	// Read reason from request body
 	var req struct {
 		Reason string `json:"reason"`
@@ -503,49 +505,102 @@ func (s *Server) handleBanIP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleIngestStream(w http.ResponseWriter, r *http.Request) {
-	var payload map[string]interface{}
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		http.Error(w, "Invalid JSON payload: "+err.Error(), http.StatusBadRequest)
+	var payloads []map[string]interface{}
+
+	// Vector might send an array or a single object. Read the raw body first.
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read body", http.StatusBadRequest)
 		return
 	}
 	defer r.Body.Close()
 
-	var ev models.EnrichedEvent
-
-	if v, ok := payload["eventid"].(string); ok { ev.EventID = v }
-	if v, ok := payload["session"].(string); ok { ev.Session = v }
-	if v, ok := payload["src_ip"].(string); ok { ev.SourceIP = v }
-	if v, ok := payload["protocol"].(string); ok { ev.Protocol = v }
-	
-	switch v := payload["src_port"].(type) {
-	case float64: ev.SourcePort = int(v)
-	}
-	switch v := payload["dst_port"].(type) {
-	case float64: ev.DestPort = int(v)
-	}
-
-	if v, ok := payload["username"].(string); ok { ev.Username = v }
-	if v, ok := payload["password"].(string); ok { ev.Password = v }
-	if v, ok := payload["input"].(string); ok { ev.Input = v }
-	
-	if v, ok := payload["timestamp"].(string); ok {
-		if t, err := time.Parse(time.RFC3339, v); err == nil {
-			ev.Timestamp = t
+	if len(bodyBytes) > 0 && bodyBytes[0] == '[' {
+		if err := json.Unmarshal(bodyBytes, &payloads); err != nil {
+			http.Error(w, "Invalid JSON array payload: "+err.Error(), http.StatusBadRequest)
+			return
 		}
-	}
-	if ev.Timestamp.IsZero() {
-		ev.Timestamp = time.Now()
-	}
-
-	if _, ok := payload["eventid"]; ok {
-		ev.HoneypotSource = "cowrie"
-	} else if _, ok := payload["http_request"]; ok {
-		ev.HoneypotSource = "snare"
 	} else {
-		ev.HoneypotSource = "unknown"
+		var single map[string]interface{}
+		if err := json.Unmarshal(bodyBytes, &single); err != nil {
+			http.Error(w, "Invalid JSON object payload: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		payloads = append(payloads, single)
 	}
 	
-	s.hub.BroadcastEvent(&ev)
+	if len(payloads) > 0 {
+		log.Printf("Received %d payloads. Sample: %+v\n", len(payloads), payloads[0])
+	}
+
+	var events []*models.EnrichedEvent
+
+	for _, payload := range payloads {
+		var ev models.EnrichedEvent
+
+		if v, ok := payload["eventid"].(string); ok {
+			ev.EventID = v
+		}
+		if v, ok := payload["session"].(string); ok {
+			ev.Session = v
+		}
+		if v, ok := payload["src_ip"].(string); ok {
+			ev.SourceIP = v
+		}
+		if v, ok := payload["protocol"].(string); ok {
+			ev.Protocol = v
+		}
+
+		switch v := payload["src_port"].(type) {
+		case float64:
+			ev.SourcePort = int(v)
+		}
+		switch v := payload["dst_port"].(type) {
+		case float64:
+			ev.DestPort = int(v)
+		}
+
+		if v, ok := payload["username"].(string); ok {
+			ev.Username = v
+		}
+		if v, ok := payload["password"].(string); ok {
+			ev.Password = v
+		}
+		if v, ok := payload["input"].(string); ok {
+			ev.Input = v
+		}
+
+		if v, ok := payload["timestamp"].(string); ok {
+			if t, err := time.Parse(time.RFC3339, v); err == nil {
+				ev.Timestamp = t
+			}
+		}
+		if ev.Timestamp.IsZero() {
+			ev.Timestamp = time.Now()
+		}
+
+		if _, ok := payload["eventid"]; ok {
+			ev.HoneypotSource = "cowrie"
+		} else if _, ok := payload["http_request"]; ok {
+			ev.HoneypotSource = "snare"
+		} else {
+			ev.HoneypotSource = "unknown"
+		}
+
+		events = append(events, &ev)
+		s.hub.BroadcastEvent(&ev)
+	}
+
+	if len(events) > 0 {
+		err := s.storage.InsertEventsBatch(events)
+		if err != nil {
+			log.Printf("ERROR: Failed to insert events batch: %v\n", err)
+		} else {
+			log.Printf("Successfully inserted %d events into MongoDB\n", len(events))
+		}
+	} else {
+		log.Printf("No events parsed from payloads\n")
+	}
 
 	w.WriteHeader(http.StatusAccepted)
 }

@@ -113,7 +113,13 @@ type IPThreatProfile struct {
 // In a full implementation, these would use MongoDB Aggregation Pipelines
 
 func (s *Storage) GetOverviewStats() (*models.OverviewStats, error) {
-	return &models.OverviewStats{}, nil
+	ctx := context.Background()
+	total, _ := s.db.Collection("logs").CountDocuments(ctx, bson.M{})
+	failed, _ := s.db.Collection("logs").CountDocuments(ctx, bson.M{"eventid": "cowrie.login.failed"})
+	return &models.OverviewStats{
+		TotalEvents: total,
+		FailedLogins: failed,
+	}, nil
 }
 
 func (s *Storage) GetTimeline(limit int) ([]models.TimelinePoint, error) {
@@ -133,7 +139,27 @@ func (s *Storage) GetTopCommands(limit int) ([]models.CommandStat, error) {
 }
 
 func (s *Storage) GetSessions(limit int) ([]SessionRecord, error) {
-	return []SessionRecord{}, nil
+	ctx := context.Background()
+	opts := options.Find().SetLimit(int64(limit))
+	cursor, err := s.db.Collection("logs").Find(ctx, bson.M{"eventid": bson.M{"$in": []string{"cowrie.session.connect", "cowrie.session.closed"}}}, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	var events []*models.EnrichedEvent
+	if err = cursor.All(ctx, &events); err != nil {
+		return nil, err
+	}
+	var sessions []SessionRecord
+	for _, ev := range events {
+		sessions = append(sessions, SessionRecord{
+			SessionID: ev.Session,
+			SourceIP:  ev.SourceIP,
+			StartTime: ev.Timestamp,
+			Duration:  ev.Duration,
+		})
+	}
+	return sessions, nil
 }
 
 func (s *Storage) GetSessionCommands(sessionID string) ([]models.CommandStat, error) {
