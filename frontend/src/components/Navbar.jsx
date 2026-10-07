@@ -33,6 +33,7 @@ export default function Navbar({
     { id: 'loot', label: 'Payload Loot', icon: Bug },
     { id: 'botnet', label: 'Botnet Fingerprints', icon: Fingerprint },
     { id: 'alerts', label: 'Webhook Alerts', icon: Bell },
+    { id: 'access', label: 'Access Control', icon: Shield },
     { id: 'alloy', label: 'Alloy Pipeline', icon: Cpu },
     { id: 'provision', label: 'Provision Sensor', icon: Server },
   ];
