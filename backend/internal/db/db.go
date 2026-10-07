@@ -123,64 +123,360 @@ func (s *Storage) GetOverviewStats() (*models.OverviewStats, error) {
 }
 
 func (s *Storage) GetTimeline(limit int) ([]models.TimelinePoint, error) {
-	return []models.TimelinePoint{}, nil
-}
-
-func (s *Storage) GetTopCountries(limit int) ([]models.CountryAttackStat, error) {
-	return []models.CountryAttackStat{}, nil
-}
-
-func (s *Storage) GetTopCredentials(limit int) ([]models.CredentialStat, error) {
-	return []models.CredentialStat{}, nil
-}
-
-func (s *Storage) GetTopCommands(limit int) ([]models.CommandStat, error) {
-	return []models.CommandStat{}, nil
-}
-
-func (s *Storage) GetSessions(limit int) ([]SessionRecord, error) {
 	ctx := context.Background()
-	opts := options.Find().SetLimit(int64(limit))
-	cursor, err := s.db.Collection("logs").Find(ctx, bson.M{"eventid": bson.M{"$in": []string{"cowrie.session.connect", "cowrie.session.closed"}}}, opts)
+	pipeline := mongo.Pipeline{
+		{{Key: "$group", Value: bson.M{
+			"_id": bson.M{"$dateToString": bson.M{"format": "%Y-%m-%d", "date": "$timestamp"}},
+			"total": bson.M{"$sum": 1},
+			"ssh": bson.M{"$sum": bson.M{"$cond": []interface{}{bson.M{"$eq": []interface{}{"$protocol", "ssh"}}, 1, 0}}},
+			"telnet": bson.M{"$sum": bson.M{"$cond": []interface{}{bson.M{"$eq": []interface{}{"$protocol", "telnet"}}, 1, 0}}},
+		}}},
+		{{Key: "$sort", Value: bson.M{"_id": -1}}},
+		{{Key: "$limit", Value: limit}},
+	}
+	cursor, err := s.db.Collection("logs").Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, err
 	}
 	defer cursor.Close(ctx)
-	var events []*models.EnrichedEvent
-	if err = cursor.All(ctx, &events); err != nil {
+
+	var results []models.TimelinePoint
+	for cursor.Next(ctx) {
+		var res struct {
+			ID     string `bson:"_id"`
+			Total  int64  `bson:"total"`
+			SSH    int64  `bson:"ssh"`
+			Telnet int64  `bson:"telnet"`
+		}
+		if err := cursor.Decode(&res); err != nil {
+			return nil, err
+		}
+		results = append(results, models.TimelinePoint{
+			TimeBucket: res.ID,
+			Total:      res.Total,
+			SSH:        res.SSH,
+			Telnet:     res.Telnet,
+		})
+	}
+	return results, nil
+}
+
+func (s *Storage) GetTopCountries(limit int) ([]models.CountryAttackStat, error) {
+	ctx := context.Background()
+	pipeline := mongo.Pipeline{
+		{{Key: "$group", Value: bson.M{
+			"_id": "$geo.country_code",
+			"country_name": bson.M{"$first": "$geo.country_name"},
+			"latitude": bson.M{"$first": "$geo.latitude"},
+			"longitude": bson.M{"$first": "$geo.longitude"},
+			"count": bson.M{"$sum": 1},
+		}}},
+		{{Key: "$sort", Value: bson.M{"count": -1}}},
+		{{Key: "$limit", Value: limit}},
+	}
+	cursor, err := s.db.Collection("logs").Aggregate(ctx, pipeline)
+	if err != nil {
 		return nil, err
 	}
+	defer cursor.Close(ctx)
+
+	var results []models.CountryAttackStat
+	for cursor.Next(ctx) {
+		var res struct {
+			ID          string  `bson:"_id"`
+			CountryName string  `bson:"country_name"`
+			Count       int64   `bson:"count"`
+			Lat         float64 `bson:"latitude"`
+			Lon         float64 `bson:"longitude"`
+		}
+		if err := cursor.Decode(&res); err != nil {
+			return nil, err
+		}
+		if res.ID != "" {
+			results = append(results, models.CountryAttackStat{
+				CountryCode: res.ID,
+				CountryName: res.CountryName,
+				Count:       res.Count,
+				Latitude:    res.Lat,
+				Longitude:   res.Lon,
+			})
+		}
+	}
+	return results, nil
+}
+
+func (s *Storage) GetTopCredentials(limit int) ([]models.CredentialStat, error) {
+	ctx := context.Background()
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"eventid": bson.M{"$in": []string{"cowrie.login.failed", "cowrie.login.success"}}}}},
+		{{Key: "$group", Value: bson.M{
+			"_id": bson.M{"username": "$username", "password": "$password"},
+			"count": bson.M{"$sum": 1},
+			"last_seen": bson.M{"$max": "$timestamp"},
+		}}},
+		{{Key: "$sort", Value: bson.M{"count": -1}}},
+		{{Key: "$limit", Value: limit}},
+	}
+	cursor, err := s.db.Collection("logs").Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var results []models.CredentialStat
+	for cursor.Next(ctx) {
+		var res struct {
+			ID struct {
+				Username string `bson:"username"`
+				Password string `bson:"password"`
+			} `bson:"_id"`
+			Count    int64     `bson:"count"`
+			LastSeen time.Time `bson:"last_seen"`
+		}
+		if err := cursor.Decode(&res); err != nil {
+			return nil, err
+		}
+		results = append(results, models.CredentialStat{
+			Username: res.ID.Username,
+			Password: res.ID.Password,
+			Count:    res.Count,
+			LastSeen: res.LastSeen,
+		})
+	}
+	return results, nil
+}
+
+func (s *Storage) GetTopCommands(limit int) ([]models.CommandStat, error) {
+	ctx := context.Background()
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"eventid": "cowrie.command.input"}}},
+		{{Key: "$group", Value: bson.M{
+			"_id": "$input",
+			"count": bson.M{"$sum": 1},
+		}}},
+		{{Key: "$sort", Value: bson.M{"count": -1}}},
+		{{Key: "$limit", Value: limit}},
+	}
+	cursor, err := s.db.Collection("logs").Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var results []models.CommandStat
+	for cursor.Next(ctx) {
+		var res struct {
+			ID    string `bson:"_id"`
+			Count int64  `bson:"count"`
+		}
+		if err := cursor.Decode(&res); err != nil {
+			return nil, err
+		}
+		results = append(results, models.CommandStat{
+			Command: res.ID,
+			Count:   res.Count,
+		})
+	}
+	return results, nil
+}
+
+func (s *Storage) GetSessions(limit int) ([]SessionRecord, error) {
+	ctx := context.Background()
+	pipeline := mongo.Pipeline{
+		{{Key: "$group", Value: bson.M{
+			"_id": "$session",
+			"src_ip": bson.M{"$first": "$src_ip"},
+			"start_time": bson.M{"$min": "$timestamp"},
+			"end_time": bson.M{"$max": "$timestamp"},
+			"event_count": bson.M{"$sum": 1},
+		}}},
+		{{Key: "$sort", Value: bson.M{"start_time": -1}}},
+		{{Key: "$limit", Value: limit}},
+	}
+	cursor, err := s.db.Collection("logs").Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
 	var sessions []SessionRecord
-	for _, ev := range events {
+	for cursor.Next(ctx) {
+		var res struct {
+			SessionID  string    `bson:"_id"`
+			SourceIP   string    `bson:"src_ip"`
+			StartTime  time.Time `bson:"start_time"`
+			EndTime    time.Time `bson:"end_time"`
+			EventCount int       `bson:"event_count"`
+		}
+		if err := cursor.Decode(&res); err != nil {
+			return nil, err
+		}
+		duration := res.EndTime.Sub(res.StartTime).Seconds()
 		sessions = append(sessions, SessionRecord{
-			SessionID: ev.Session,
-			SourceIP:  ev.SourceIP,
-			StartTime: ev.Timestamp,
-			Duration:  ev.Duration,
+			SessionID:  res.SessionID,
+			SourceIP:   res.SourceIP,
+			StartTime:  res.StartTime,
+			EndTime:    res.EndTime,
+			Duration:   duration,
+			EventCount: res.EventCount,
 		})
 	}
 	return sessions, nil
 }
 
 func (s *Storage) GetSessionCommands(sessionID string) ([]models.CommandStat, error) {
-	return []models.CommandStat{}, nil
+	ctx := context.Background()
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"session": sessionID, "eventid": "cowrie.command.input"}}},
+		{{Key: "$group", Value: bson.M{
+			"_id": "$input",
+			"count": bson.M{"$sum": 1},
+		}}},
+		{{Key: "$sort", Value: bson.M{"count": -1}}},
+	}
+	cursor, err := s.db.Collection("logs").Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var results []models.CommandStat
+	for cursor.Next(ctx) {
+		var res struct {
+			ID    string `bson:"_id"`
+			Count int64  `bson:"count"`
+		}
+		if err := cursor.Decode(&res); err != nil {
+			return nil, err
+		}
+		results = append(results, models.CommandStat{
+			Command: res.ID,
+			Count:   res.Count,
+		})
+	}
+	return results, nil
 }
 
 func (s *Storage) GetMalwareFiles(limit int) ([]MalwareRecord, error) {
-	return []MalwareRecord{}, nil
+	ctx := context.Background()
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"eventid": "cowrie.session.file_download"}}},
+		{{Key: "$sort", Value: bson.M{"timestamp": -1}}},
+		{{Key: "$limit", Value: limit}},
+	}
+	cursor, err := s.db.Collection("logs").Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var results []MalwareRecord
+	for cursor.Next(ctx) {
+		var ev models.EnrichedEvent
+		if err := cursor.Decode(&ev); err != nil {
+			return nil, err
+		}
+		results = append(results, MalwareRecord{
+			SHA256:    ev.SHA256,
+			URL:       ev.DownloadURL,
+			Size:      ev.FileSize,
+			Timestamp: ev.Timestamp,
+			SessionID: ev.Session,
+			SourceIP:  ev.SourceIP,
+		})
+	}
+	return results, nil
 }
 
 func (s *Storage) GetIPThreatProfile(ip string) (*IPThreatProfile, error) {
+	ctx := context.Background()
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"src_ip": ip}}},
+		{{Key: "$group", Value: bson.M{
+			"_id": "$src_ip",
+			"country_code": bson.M{"$first": "$geo.country_code"},
+			"city": bson.M{"$first": "$geo.city"},
+			"asn": bson.M{"$first": "$geo.asn"},
+			"total_events": bson.M{"$sum": 1},
+			"first_seen": bson.M{"$min": "$timestamp"},
+			"last_seen": bson.M{"$max": "$timestamp"},
+		}}},
+	}
+	cursor, err := s.db.Collection("logs").Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	if cursor.Next(ctx) {
+		var res IPThreatProfile
+		if err := cursor.Decode(&res); err != nil {
+			return nil, err
+		}
+		res.IP = ip
+		return &res, nil
+	}
 	return &IPThreatProfile{IP: ip}, nil
 }
 
 func (s *Storage) GetBotnetFingerprints(limit int) ([]models.BotnetFingerprint, error) {
-	return []models.BotnetFingerprint{}, nil
+	ctx := context.Background()
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"ssh_version": bson.M{"$ne": ""}}}},
+		{{Key: "$group", Value: bson.M{
+			"_id": "$ssh_version",
+			"count": bson.M{"$sum": 1},
+			"first_seen": bson.M{"$min": "$timestamp"},
+			"last_seen": bson.M{"$max": "$timestamp"},
+		}}},
+		{{Key: "$sort", Value: bson.M{"count": -1}}},
+		{{Key: "$limit", Value: limit}},
+	}
+	cursor, err := s.db.Collection("logs").Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var results []models.BotnetFingerprint
+	for cursor.Next(ctx) {
+		var res struct {
+			ID        string    `bson:"_id"`
+			Count     int64     `bson:"count"`
+			FirstSeen time.Time `bson:"first_seen"`
+			LastSeen  time.Time `bson:"last_seen"`
+		}
+		if err := cursor.Decode(&res); err != nil {
+			return nil, err
+		}
+		results = append(results, models.BotnetFingerprint{
+			ClientVersion:  res.ID,
+			BotnetCategory: "Unknown",
+			SignatureType:  "Unknown",
+			Count:          res.Count,
+			FirstSeen:      res.FirstSeen,
+			LastSeen:       res.LastSeen,
+		})
+	}
+	return results, nil
 }
 
 func (s *Storage) GetSessionEvents(sessionID string) ([]*models.EnrichedEvent, error) {
-	return []*models.EnrichedEvent{}, nil
+	ctx := context.Background()
+	opts := options.Find().SetSort(bson.D{{"timestamp", 1}})
+	cursor, err := s.db.Collection("logs").Find(ctx, bson.M{"session": sessionID}, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var events []*models.EnrichedEvent
+	if err = cursor.All(ctx, &events); err != nil {
+		return nil, err
+	}
+	return events, nil
 }
+
 
 func (s *Storage) SaveAIAnalysis(sessionID string, res *models.AIAnalysisResult) error {
 	ctx := context.Background()
