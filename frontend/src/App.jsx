@@ -52,6 +52,7 @@ export default function App() {
   const [sessions, setSessions] = useState([]);
   const [malwareFiles, setMalwareFiles] = useState([]);
   const [sensors, setSensors] = useState([]);
+  const [selectedSensor, setSelectedSensor] = useState('all');
 
   // PWA Install Prompt Listener
   useEffect(() => {
@@ -92,9 +93,9 @@ export default function App() {
         fetchTimeline(24),
         fetchTopCountries(15),
         fetchTopCredentials(25),
-        fetchTopIPs(10),
+        fetchTopIPs(7),
         fetchTopCommands(20),
-        fetchEvents({ limit: 80 }),
+        fetchEvents({ limit: 80, sensor: selectedSensor === 'all' ? '' : selectedSensor }),
         fetchSessions(40),
         fetchMalwareFiles(40),
         fetchSensors(),
@@ -227,7 +228,7 @@ export default function App() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Left 2 Cols: Live Terminal stream preview */}
               <div className="lg:col-span-2">
-                <TerminalStream events={events.slice(0, 30)} />
+                <TerminalStream events={events.slice(0, 30)} sensors={sensors} selectedSensor={selectedSensor} onSelectSensor={setSelectedSensor} />
               </div>
 
               {/* Right 1 Col: Recurrent Threat Actors */}
@@ -240,7 +241,7 @@ export default function App() {
 
         {/* 1. The Real-Time Terminal Stream (WebSockets) */}
         {activeTab === 'terminal' && (
-          <TerminalStream events={events} />
+          <TerminalStream events={events} sensors={sensors} selectedSensor={selectedSensor} onSelectSensor={setSelectedSensor} />
         )}
 
         {/* 2. The Credential Harvesting Wall */}

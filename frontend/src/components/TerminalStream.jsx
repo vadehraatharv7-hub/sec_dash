@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Terminal, Pause, Play, Trash2, Download, Search, Check, Copy, Globe, ShieldAlert } from 'lucide-react';
 
-export default function TerminalStream({ events = [] }) {
+export default function TerminalStream({ events = [], sensors = [], selectedSensor = 'all', onSelectSensor }) {
   const [autoScroll, setAutoScroll] = useState(true);
   const [grepQuery, setGrepQuery] = useState('');
   const [logLevel, setLogLevel] = useState('all');
@@ -87,6 +87,18 @@ export default function TerminalStream({ events = [] }) {
               className="rounded bg-slate-950 border border-slate-800 pl-7 pr-2.5 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
             />
           </div>
+
+          {/* Sensor Filter */}
+          <select
+            value={selectedSensor}
+            onChange={(e) => onSelectSensor && onSelectSensor(e.target.value)}
+            className="rounded bg-slate-950 border border-slate-800 px-2.5 py-1 text-xs text-slate-300 focus:outline-none focus:border-cyan-500"
+          >
+            <option value="all">ALL SENSORS</option>
+            {sensors.map(s => (
+                <option key={s.sensor_id} value={s.sensor_id}>{s.sensor_id}</option>
+            ))}
+          </select>
 
           {/* Level Filter */}
           <select
