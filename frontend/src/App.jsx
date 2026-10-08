@@ -151,7 +151,7 @@ export default function App() {
       fetchTopCredentials(25).then((cr) => setCredentials(cr || [])).catch(() => {});
       fetchSessions(40).then((se) => setSessions(se || [])).catch(() => {});
       fetchMalwareFiles(40).then((mf) => setMalwareFiles(mf || [])).catch(() => {});
-    }, 8000);
+    }, 30000);
 
     return () => {
       stream.close();
