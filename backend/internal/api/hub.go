@@ -1,14 +1,12 @@
 package api
 
 import (
-	"context"
 	"log"
 	"net/http"
 	"sync"
 
 	"github.com/gorilla/websocket"
 	"sec_dash/backend/internal/models"
-	"sec_dash/backend/internal/broker"
 )
 
 var upgrader = websocket.Upgrader{
@@ -24,27 +22,14 @@ type Hub struct {
 	register   chan *websocket.Conn
 	unregister chan *websocket.Conn
 	lock       sync.Mutex
-	broker     *broker.RedisBroker
 }
 
-func NewHub(b *broker.RedisBroker) *Hub {
+func NewHub() *Hub {
 	h := &Hub{
 		clients:    make(map[*websocket.Conn]bool),
 		broadcast:  make(chan *models.EnrichedEvent, 1000),
 		register:   make(chan *websocket.Conn),
 		unregister: make(chan *websocket.Conn),
-		broker:     b,
-	}
-
-	// Subscribe to Redis events
-	if b != nil {
-		go b.SubscribeEvents(context.Background(), func(ev *models.EnrichedEvent) {
-			// Forward Redis pub/sub event to the local broadcast channel
-			select {
-			case h.broadcast <- ev:
-			default:
-			}
-		})
 	}
 
 	return h
@@ -83,17 +68,11 @@ func (h *Hub) Run() {
 	}
 }
 
-// BroadcastEvent publishes an event to Redis (which then comes back via SubscribeEvents)
+// BroadcastEvent publishes an event to local channel
 func (h *Hub) BroadcastEvent(event *models.EnrichedEvent) {
-	if h.broker != nil {
-		// Publish to Redis so all scaled backends get it
-		_ = h.broker.PublishEvent(context.Background(), event)
-	} else {
-		// Fallback to local channel if no broker
-		select {
-		case h.broadcast <- event:
-		default:
-		}
+	select {
+	case h.broadcast <- event:
+	default:
 	}
 }
 

@@ -21,7 +21,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
-	"github.com/redis/go-redis/v9"
 
 	"sec_dash/backend/internal/killchain"
 	"sec_dash/backend/internal/models"
@@ -510,16 +509,7 @@ func (s *Server) handleBanIP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Publish to Redis ban_feed
-	redisClient := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-	})
-	defer redisClient.Close()
-	if err := redisClient.Publish(r.Context(), "ban_feed", ip).Err(); err != nil {
-		log.Printf("Failed to publish banned IP to Redis: %v", err)
-	} else {
-		log.Printf("Published banned IP %s to Redis ban_feed", ip)
-	}
+
 
 	respondJSON(w, http.StatusOK, map[string]string{"status": "success", "ip": ip, "reason": req.Reason})
 }
@@ -566,6 +556,8 @@ func (s *Server) handleIngestStream(w http.ResponseWriter, r *http.Request) {
 		}
 		if v, ok := payload["sensor"].(string); ok {
 			ev.SensorID = v
+		} else if q := r.URL.Query().Get("sensor"); q != "" {
+			ev.SensorID = q
 		}
 		if v, ok := payload["src_ip"].(string); ok {
 			ev.SourceIP = v
@@ -769,10 +761,7 @@ func (s *Server) handleUnbanIP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Publish unban to Redis
-	if s.hub != nil && s.hub.broker != nil {
-		_ = s.hub.broker.PublishBan(r.Context(), ip, 0) // duration 0 means unban/whitelist
-	}
+
 
 	w.WriteHeader(http.StatusAccepted)
 }

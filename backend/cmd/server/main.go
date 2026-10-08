@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"sec_dash/backend/internal/api"
-	"sec_dash/backend/internal/broker"
 	"sec_dash/backend/internal/db"
 
 	"github.com/joho/godotenv"
@@ -33,11 +32,6 @@ func main() {
 		mongoURI = "mongodb://localhost:27017"
 	}
 
-	redisAddr := os.Getenv("REDIS_ADDR")
-	if redisAddr == "" {
-		redisAddr = "localhost:6379" // Local fallback
-	}
-
 	log.Println("==================================================")
 	log.Println("🛡️  SecDash Honeypot Production Engine (Golang)")
 	log.Println("==================================================")
@@ -49,14 +43,11 @@ func main() {
 	}
 	defer storage.Close()
 
-	// 2. Initialize Redis Broker
-	redisBroker := broker.NewRedisBroker(redisAddr)
-
-	// 3. Initialize Parser & WebSocket Hub with Redis
-	hub := api.NewHub(redisBroker)
+	// 2. Initialize WebSocket Hub
+	hub := api.NewHub()
 	go hub.Run()
 
-	// 4. Initialize HTTP Server
+	// 3. Initialize HTTP Server
 	server := api.NewServer(storage, hub)
 	httpServer := &http.Server{
 		Addr:         ":" + port,
