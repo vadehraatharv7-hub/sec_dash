@@ -85,7 +85,7 @@ func (s *Storage) GetRecentEvents(limit int, eventFilter, ipFilter string) ([]*m
 		filter["src_ip"] = ipFilter
 	}
 
-	opts := options.Find().SetLimit(int64(limit))
+	opts := options.Find().SetLimit(int64(limit)).SetSort(bson.M{"timestamp": -1})
 	cursor, err := s.db.Collection("logs").Find(ctx, filter, opts)
 	if err != nil {
 		return nil, err
@@ -516,7 +516,7 @@ func (s *Storage) GetBotnetFingerprints(limit int) ([]models.BotnetFingerprint, 
 
 func (s *Storage) GetSessionEvents(sessionID string) ([]*models.EnrichedEvent, error) {
 	ctx := context.Background()
-	opts := options.Find()
+	opts := options.Find().SetSort(bson.M{"timestamp": 1})
 	cursor, err := s.db.Collection("logs").Find(ctx, bson.M{"session": sessionID}, opts)
 	if err != nil {
 		return nil, err
@@ -679,9 +679,23 @@ func (s *Storage) GetActiveSensors() ([]models.SensorStat, error) {
 			continue
 		}
 		if res.SensorID == "" {
-			res.SensorID = "unknown-sensor"
+			res.SensorID = "vm-honeypot"
 		}
-		results = append(results, res)
+		// Merge if vm-honeypot already exists
+		found := false
+		for i, v := range results {
+			if v.SensorID == res.SensorID {
+				results[i].EventCount += res.EventCount
+				if res.LastSeen.After(results[i].LastSeen) {
+					results[i].LastSeen = res.LastSeen
+				}
+				found = true
+				break
+			}
+		}
+		if !found {
+			results = append(results, res)
+		}
 	}
 	return results, nil
 }
