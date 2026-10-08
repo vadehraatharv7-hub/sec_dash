@@ -12,7 +12,8 @@ import {
   Cpu, 
   Search,
   Download,
-  CheckCircle2
+  CheckCircle2,
+  Server
 } from 'lucide-react';
 
 export default function Navbar({ 
