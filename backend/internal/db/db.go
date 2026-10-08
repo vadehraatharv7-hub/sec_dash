@@ -37,15 +37,22 @@ func NewStorage(mongoURI string) (*Storage, error) {
 	// Ensure indexes for Cosmos DB sorting
 	indexCtx, cancelIndex := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelIndex()
-	_, err = database.Collection("logs").Indexes().CreateOne(indexCtx, mongo.IndexModel{
-		Keys: bson.D{{"timestamp", -1}},
-	})
+	
+	indexes := []mongo.IndexModel{
+		{Keys: bson.D{{"timestamp", -1}}},
+		{Keys: bson.D{{"eventid", 1}}},
+		{Keys: bson.D{{"src_ip", 1}}},
+		{Keys: bson.D{{"geo.country_code", 1}}},
+		{Keys: bson.D{{"session", 1}}},
+	}
+	
+	_, err = database.Collection("logs").Indexes().CreateMany(indexCtx, indexes)
 	if err != nil {
-		fmt.Printf("Warning: Failed to create index on timestamp: %v\n", err)
+		fmt.Printf("Warning: Failed to create MongoDB indexes: %v\n", err)
 	}
 
-
 	return &Storage{
+
 		client: client,
 		db:     database,
 	}, nil

@@ -99,6 +99,7 @@ func (s *Server) Routes() http.Handler {
 		r.Get("/stats/overview", s.handleStatsOverview)
 		r.Get("/stats/timeline", s.handleStatsTimeline)
 		r.Get("/stats/countries", s.handleStatsCountries)
+		r.Get("/stats/ips", s.handleGetTopIPs)
 		r.Get("/stats/credentials", s.handleStatsCredentials)
 		r.Get("/stats/commands", s.handleStatsCommands)
 		r.Get("/stats/fingerprints", s.handleGetBotnetFingerprints)
@@ -125,7 +126,7 @@ func (s *Server) Routes() http.Handler {
 		r.Get("/webhooks/logs", s.handleListWebhookLogs)
 
 		// Grafana Alloy pipeline setup guide
-		r.Get("/config/alloy", s.handleAlloyConfig)
+		
 	})
 
 	// Serve Production PWA Frontend if dist directory exists
@@ -164,12 +165,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleIngestCowrie handles native Cowrie JSON or JSON array/stream
-func (s *Server) handleIngestCowrie(w http.ResponseWriter, r *http.Request) {}
 
-func (s *Server) handleIngestLoki(w http.ResponseWriter, r *http.Request) {}
-
-func (s *Server) handleIngestRaw(w http.ResponseWriter, r *http.Request) {}
 
 func (s *Server) handleStatsOverview(w http.ResponseWriter, r *http.Request) {
 	stats, err := s.storage.GetOverviewStats()
@@ -483,7 +479,7 @@ func (s *Server) handleListWebhookLogs(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, logs)
 }
 
-func (s *Server) handleAlloyConfig(w http.ResponseWriter, r *http.Request) {}
+
 
 func respondJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
