@@ -32,12 +32,14 @@ export async function fetchTopCommands(limit = 15) {
   return res.json();
 }
 
-export async function fetchEvents({ limit = 50, type = '', ip = '' } = {}) {
+export async function fetchEvents({ limit = 50, type = '', ip = '', sensor = '' } = {}) {
   const params = new URLSearchParams();
   if (limit) params.append('limit', limit);
   if (type) params.append('type', type);
   if (ip) params.append('ip', ip);
+  if (sensor) params.append('sensor', sensor);
   const res = await fetch(`${API_BASE}/events?${params.toString()}`);
+  if (!res.ok) throw new Error('API returned ' + res.status);
   return res.json();
 }
 

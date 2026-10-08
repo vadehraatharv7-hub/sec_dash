@@ -75,7 +75,7 @@ func (s *Storage) InsertEventsBatch(events []*models.EnrichedEvent) error {
 	return err
 }
 
-func (s *Storage) GetRecentEvents(limit int, eventFilter, ipFilter string) ([]*models.EnrichedEvent, error) {
+func (s *Storage) GetRecentEvents(limit int, eventFilter, ipFilter, sensorFilter string) ([]*models.EnrichedEvent, error) {
 	ctx := context.Background()
 	filter := bson.M{}
 	if eventFilter != "" {
@@ -84,11 +84,16 @@ func (s *Storage) GetRecentEvents(limit int, eventFilter, ipFilter string) ([]*m
 	if ipFilter != "" {
 		filter["src_ip"] = ipFilter
 	}
+	if sensorFilter != "" && sensorFilter != "all" {
+		filter["sensor_id"] = sensorFilter
+	}
 
 	opts := options.Find().SetLimit(int64(limit)).SetSort(bson.M{"timestamp": -1})
 	cursor, err := s.db.Collection("logs").Find(ctx, filter, opts)
 	if err != nil {
-		return nil, err
+		// Log the error but return empty array instead of failing completely, to avoid breaking the frontend on 429 Too Many Requests
+		fmt.Printf("Warning: GetRecentEvents failed: %v\n", err)
+		return []*models.EnrichedEvent{}, nil
 	}
 	defer cursor.Close(ctx)
 

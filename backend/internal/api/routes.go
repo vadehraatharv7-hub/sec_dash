@@ -257,8 +257,9 @@ func (s *Server) handleGetEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	eventType := r.URL.Query().Get("type")
 	ip := r.URL.Query().Get("ip")
+	sensor := r.URL.Query().Get("sensor")
 
-	events, err := s.storage.GetRecentEvents(limit, eventType, ip)
+	events, err := s.storage.GetRecentEvents(limit, eventType, ip, sensor)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

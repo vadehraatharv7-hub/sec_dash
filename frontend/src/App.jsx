@@ -54,6 +54,13 @@ export default function App() {
   const [sensors, setSensors] = useState([]);
   const [selectedSensor, setSelectedSensor] = useState('all');
 
+  // Fetch events when sensor changes
+  useEffect(() => {
+    fetchEvents({ limit: 80, sensor: selectedSensor === 'all' ? '' : selectedSensor })
+      .then(res => setEvents(res || []))
+      .catch(e => console.error("Failed to fetch events:", e));
+  }, [selectedSensor]);
+
   // PWA Install Prompt Listener
   useEffect(() => {
     const handleBeforeInstall = (e) => {
@@ -85,8 +92,7 @@ export default function App() {
         credData,
         ipData,
         cmdData,
-        eventData,
-        sessionData,
+                sessionData,
         malwareData,
       ] = await Promise.allSettled([
         fetchOverviewStats(),
@@ -95,7 +101,6 @@ export default function App() {
         fetchTopCredentials(25),
         fetchTopIPs(7),
         fetchTopCommands(20),
-        fetchEvents({ limit: 80, sensor: selectedSensor === 'all' ? '' : selectedSensor }),
         fetchSessions(40),
         fetchMalwareFiles(40),
         fetchSensors(),
@@ -107,8 +112,7 @@ export default function App() {
       if (credData.status === 'fulfilled') setCredentials(credData.value || []);
       if (ipData && ipData.status === 'fulfilled') setTopIPs(ipData.value || []);
       if (cmdData && cmdData.status === 'fulfilled') setCommands(cmdData.value || []);
-      if (eventData.status === 'fulfilled') setEvents(eventData.value || []);
-      if (sessionData.status === 'fulfilled') setSessions(sessionData.value || []);
+            if (sessionData.status === 'fulfilled') setSessions(sessionData.value || []);
       if (malwareData.status === 'fulfilled') setMalwareFiles(malwareData.value || []);
     } catch (err) {
       console.error('Failed to load telemetry:', err);
