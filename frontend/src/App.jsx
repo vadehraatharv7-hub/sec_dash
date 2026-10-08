@@ -214,50 +214,16 @@ export default function App() {
             {/* Attack Velocity Timeline */}
             <AttackTimeline timeline={timeline} />
 
-            {/* Intercepted Shell Sandbox Commands */}
+            {/* Live Terminal & Top IPs */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Left 2 Cols: Live Terminal stream preview */}
-              <div className="lg:col-span-2 space-y-6">
+              <div className="lg:col-span-2">
                 <TerminalStream events={events.slice(0, 30)} />
-                <TopIPs ips={topIPs} onSelectIP={setSelectedIP} />
               </div>
 
-              {/* Right 1 Col: Top Sandbox Commands */}
-              <div className="rounded-lg bg-[#0b1120] border border-slate-800 p-4 font-mono text-xs flex flex-col h-[650px]">
-                <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800">
-                  <div className="flex items-center gap-2">
-                    <Terminal className="h-4 w-4 text-rose-400" />
-                    <span className="font-bold text-slate-200 uppercase">INTERCEPTED COMMANDS</span>
-                  </div>
-                  <span className="text-[10px] text-slate-500">FREQUENCY</span>
-                </div>
-
-                <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-                  {commands.map((cmd, i) => (
-                    <div
-                      key={i}
-                      className="p-2 rounded bg-slate-950/80 border border-slate-850 flex items-center justify-between gap-2 hover:border-slate-700 transition-colors"
-                    >
-                      <div className="flex items-center gap-1.5 truncate">
-                        <span className="text-rose-400 font-bold select-none">#</span>
-                        <span className="text-slate-200 font-bold truncate">{cmd.command}</span>
-                      </div>
-                      <span className="text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded text-[10px] font-bold border border-slate-800 shrink-0">
-                        {cmd.count}x
-                      </span>
-                    </div>
-                  ))}
-
-                  {commands.length === 0 && (
-                    <div className="py-16 text-center text-slate-500 italic">
-                      Waiting for command execution telemetry...
-                    </div>
-                  )}
-                </div>
-
-                <div className="pt-3 border-t border-slate-800 text-[10px] text-slate-500">
-                  Sandbox: Fake Debian GNU/Linux 11 (Bullseye)
-                </div>
+              {/* Right 1 Col: Recurrent Threat Actors */}
+              <div className="lg:col-span-1">
+                <TopIPs ips={topIPs} onSelectIP={setSelectedIP} />
               </div>
             </div>
           </div>
