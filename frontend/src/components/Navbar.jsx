@@ -12,8 +12,7 @@ import {
   Cpu, 
   Search,
   Download,
-  CheckCircle2,
-  Server
+  CheckCircle2
 } from 'lucide-react';
 
 export default function Navbar({ 
@@ -87,7 +86,6 @@ export default function Navbar({
           {/* Production Mode Indicator */}
           <div className="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-mono font-bold">
             <CheckCircle2 className="h-3 w-3" />
-  Server
             <span>PRODUCTION</span>
           </div>
 

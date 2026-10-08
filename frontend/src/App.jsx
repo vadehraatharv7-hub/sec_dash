@@ -29,12 +29,8 @@ import {
 } from './utils/api';
 
 import { 
-  ShieldCheck, Shield, 
   Terminal, 
-  Server, 
-  CheckCircle2, 
-  Activity,
-  Cpu
+  CheckCircle2
 } from 'lucide-react';
 
 export default function App() {
