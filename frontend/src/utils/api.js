@@ -243,3 +243,9 @@ export async function fetchTopIPs(limit = 10) {
   if (!res.ok) throw new Error('Failed to fetch top IPs');
   return res.json();
 }
+
+export async function fetchSensors() {
+  const res = await fetch(`${API_BASE}/stats/sensors`);
+  if (!res.ok) throw new Error('Failed to fetch sensors');
+  return res.json();
+}

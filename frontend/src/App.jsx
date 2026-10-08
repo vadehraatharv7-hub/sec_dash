@@ -24,7 +24,8 @@ import {
   fetchTopIPs, 
   fetchEvents, 
   fetchSessions, 
-  fetchMalwareFiles, 
+  fetchMalwareFiles,
+  fetchSensors, 
   createAttackStream 
 } from './utils/api';
 
@@ -50,6 +51,7 @@ export default function App() {
   const [events, setEvents] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [malwareFiles, setMalwareFiles] = useState([]);
+  const [sensors, setSensors] = useState([]);
 
   // PWA Install Prompt Listener
   useEffect(() => {
@@ -74,6 +76,7 @@ export default function App() {
   // Load telemetry data from Go backend
   const loadAllData = async () => {
     try {
+      fetchSensors().then(sen => setSensors(sen || [])).catch(() => {});
       const [
         overviewData,
         timelineData,
@@ -94,6 +97,7 @@ export default function App() {
         fetchEvents({ limit: 80 }),
         fetchSessions(40),
         fetchMalwareFiles(40),
+        fetchSensors(),
       ]);
 
       if (overviewData.status === 'fulfilled') setStats(overviewData.value);
@@ -176,8 +180,13 @@ export default function App() {
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
               <CheckCircle2 className="h-3.5 w-3.5" />
-              <span>MULTI-SENSOR HONEYPOT ACTIVE</span>
+              <span>{sensors.length > 0 ? `${sensors.length} ACTIVE SENSOR${sensors.length > 1 ? 'S' : ''}` : 'MULTI-SENSOR HONEYPOT ACTIVE'}</span>
             </div>
+            {sensors.length > 0 && sensors.map(s => (
+                <span key={s.sensor_id} className="ml-2 px-1.5 py-0.5 bg-slate-800 rounded text-cyan-400 border border-slate-700 text-[10px]">
+                   {s.sensor_id} ({s.event_count})
+                </span>
+            ))}
             <span className="text-slate-700">|</span>
             <span className="text-slate-400">
               Pipeline: <strong className="text-slate-200">Alloy &rarr; Golang WAL Engine</strong>

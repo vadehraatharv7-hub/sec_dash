@@ -102,6 +102,7 @@ func (s *Server) Routes() http.Handler {
 		r.Get("/stats/ips", s.handleGetTopIPs)
 		r.Get("/stats/credentials", s.handleStatsCredentials)
 		r.Get("/stats/commands", s.handleStatsCommands)
+		r.Get("/stats/sensors", s.handleGetSensors)
 		r.Get("/stats/fingerprints", s.handleGetBotnetFingerprints)
 
 		// Events, sessions, loot & threat forensics
@@ -563,6 +564,9 @@ func (s *Server) handleIngestStream(w http.ResponseWriter, r *http.Request) {
 		if v, ok := payload["session"].(string); ok {
 			ev.Session = v
 		}
+		if v, ok := payload["sensor"].(string); ok {
+			ev.SensorID = v
+		}
 		if v, ok := payload["src_ip"].(string); ok {
 			ev.SourceIP = v
 			// Perform local GeoIP lookup
@@ -787,4 +791,14 @@ func (s *Server) handleGetTopIPs(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(ips)
+}
+
+func (s *Server) handleGetSensors(w http.ResponseWriter, r *http.Request) {
+	sensors, err := s.storage.GetActiveSensors()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(sensors)
 }

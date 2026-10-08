@@ -40,26 +40,27 @@ type GeoLocation struct {
 
 // EnrichedEvent represents a normalized, geo-enriched event ready for querying and UI streaming
 type EnrichedEvent struct {
-	ID             int64       `json:"id"`
-	EventID        string      `json:"eventid"`
-	HoneypotSource string      `json:"honeypot_source"`
-	Timestamp      time.Time   `json:"timestamp"`
-	Session        string      `json:"session"`
-	SourceIP       string      `json:"src_ip"`
-	SourcePort     int         `json:"src_port"`
-	DestPort       int         `json:"dst_port"`
-	Protocol       string      `json:"protocol"`
-	Username       string      `json:"username,omitempty"`
-	Password       string      `json:"password,omitempty"`
-	Input          string      `json:"input,omitempty"`
-	SSHVersion     string      `json:"ssh_version,omitempty"`
-	DownloadURL    string      `json:"download_url,omitempty"`
-	SHA256         string      `json:"sha256,omitempty"`
-	FileSize       int64       `json:"file_size,omitempty"`
-	Duration       float64     `json:"duration,omitempty"`
-	Geo            GeoLocation `json:"geo"`
-	Severity       string      `json:"severity"` // "info", "warning", "high", "critical"
-	Description    string      `json:"description"`
+	ID             int64       `json:"id" bson:"id"`
+	EventID        string      `json:"eventid" bson:"eventid"`
+	SensorID       string      `json:"sensor_id" bson:"sensor_id"`
+	HoneypotSource string      `json:"honeypot_source" bson:"honeypot_source"`
+	Timestamp      time.Time   `json:"timestamp" bson:"timestamp"`
+	Session        string      `json:"session" bson:"session"`
+	SourceIP       string      `json:"src_ip" bson:"src_ip"`
+	SourcePort     int         `json:"src_port" bson:"src_port"`
+	DestPort       int         `json:"dst_port" bson:"dst_port"`
+	Protocol       string      `json:"protocol" bson:"protocol"`
+	Username       string      `json:"username,omitempty" bson:"username,omitempty"`
+	Password       string      `json:"password,omitempty" bson:"password,omitempty"`
+	Input          string      `json:"input,omitempty" bson:"input,omitempty"`
+	SSHVersion     string      `json:"ssh_version,omitempty" bson:"ssh_version,omitempty"`
+	DownloadURL    string      `json:"download_url,omitempty" bson:"download_url,omitempty"`
+	SHA256         string      `json:"sha256,omitempty" bson:"sha256,omitempty"`
+	FileSize       int64       `json:"file_size,omitempty" bson:"file_size,omitempty"`
+	Duration       float64     `json:"duration,omitempty" bson:"duration,omitempty"`
+	Geo            GeoLocation `json:"geo" bson:"geo"`
+	Severity       string      `json:"severity" bson:"severity"`
+	Description    string      `json:"description" bson:"description"`
 }
 
 // LokiPushRequest represents the payload structure sent by Grafana Alloy (loki.write)
@@ -187,4 +188,11 @@ type WebhookLog struct {
 	StatusCode  int       `json:"status_code"`
 	Success     bool      `json:"success"`
 	Message     string    `json:"message"`
+}
+
+// SensorStat represents an active honeypot node
+type SensorStat struct {
+	SensorID   string    `json:"sensor_id" bson:"_id"`
+	EventCount int64     `json:"event_count" bson:"count"`
+	LastSeen   time.Time `json:"last_seen" bson:"last_seen"`
 }

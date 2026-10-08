@@ -633,7 +633,7 @@ func (s *Storage) GetTopIPs(limit int) ([]IPStat, error) {
 	ctx := context.Background()
 	pipeline := mongo.Pipeline{
 		{{Key: "$group", Value: bson.M{
-			"_id":          "$src_ip",
+			"_id":          bson.M{"$ifNull": []interface{}{"$src_ip", "$sourceip"}},
 			"count":        bson.M{"$sum": 1},
 			"country_code": bson.M{"$first": "$geo.country_code"},
 		}}},
@@ -652,6 +652,36 @@ func (s *Storage) GetTopIPs(limit int) ([]IPStat, error) {
 	}
 	if results == nil {
 		results = []IPStat{}
+	}
+	return results, nil
+}
+
+func (s *Storage) GetActiveSensors() ([]models.SensorStat, error) {
+	ctx := context.Background()
+	pipeline := mongo.Pipeline{
+		{{Key: "$group", Value: bson.M{
+			"_id": "$sensor_id",
+			"count": bson.M{"$sum": 1},
+			"last_seen": bson.M{"$max": "$timestamp"},
+		}}},
+		{{Key: "$sort", Value: bson.M{"count": -1}}},
+	}
+	cursor, err := s.db.Collection("logs").Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var results []models.SensorStat
+	for cursor.Next(ctx) {
+		var res models.SensorStat
+		if err := cursor.Decode(&res); err != nil {
+			continue
+		}
+		if res.SensorID == "" {
+			res.SensorID = "unknown-sensor"
+		}
+		results = append(results, res)
 	}
 	return results, nil
 }
