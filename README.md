@@ -48,10 +48,10 @@ make demo        # synthetic attack traffic, no database needed -> http://localh
 | `MONGO_URI` | unset | MongoDB / Azure Cosmos DB (Mongo API). Unset = memory-only |
 | `PORT` | `8080` | HTTP port |
 | `STATIC_DIR` | auto (`../frontend/dist`) | Built frontend |
-| `MAX_EVENTS` | `250000` | Events held in memory for analytics (older stay in the database). ~0.6 KB each |
+| `MAX_EVENTS` | `250000` | Events held in memory for analytics (older stay in the database). About 0.45 KB each, plus roughly 0.35 KB each for every cached analytics view. The Ansible role sets `100000` for the 1 GB monitoring VM |
 | `GEO_ONLINE` | on | Set `0` to disable the online IP-location fallback (ip-api.com batch endpoint; sends attacker IPs to that service) |
 | `GEOIP_CITY_DB`, `GEOIP_ASN_DB` | auto | Path to MaxMind-format `.mmdb` files (GeoLite2 or DB-IP). Preferred over the online fallback |
-| `DASH_TOKEN` | unset | If set, every write endpoint (ban, webhooks) requires `Authorization: Bearer <token>`. The UI prompts for it |
+| `DASH_TOKEN` | unset | If set, the dashboard shows a login screen and every API call and the live stream require the token (`Authorization: Bearer`). Still open: `/api/health`, sensor ingest, and `GET /api/threats/banned` (xdp-shield polls it without a token). Ten wrong tokens in a minute lock the address out for a minute |
 | `DEMO` | unset | `1` seeds ~10 days of synthetic traffic |
 
 ## How it works
@@ -73,7 +73,7 @@ take `range` (`1h 6h 24h 7d 30d all`) and `sensor`. `GET /api/threats/banned` re
 
 ## Notes
 
-* The dashboard itself has no login; put it behind your network controls and set `DASH_TOKEN` to protect writes.
+* Set `DASH_TOKEN` in production. The Ansible monitoring role generates one on the controller (`~/.secdash_token`) and writes it to the VM. Traffic is plain HTTP unless you add TLS in front, so the token is visible to anyone on the path.
 * Webhook targets that resolve to private/loopback addresses are refused.
 * The optional AI summary of earlier versions (Gemini) and server-side Ansible provisioning were removed:
   analysis is now a local rule engine, and sensors are deployed with the Ansible roles in `honeypot-infra`.

@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { api } from './api';
+import { api, getToken } from './api';
 
 // ---- routing (hash based, so deep links survive static hosting) ------------
 
@@ -95,7 +95,8 @@ export function useLive(onEvent) {
     let ws; let timer; let closed = false; let attempts = 0;
     const connect = () => {
       const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-      ws = new WebSocket(`${proto}://${window.location.host}/ws`);
+      const token = getToken();
+      ws = new WebSocket(`${proto}://${window.location.host}/ws${token ? `?token=${encodeURIComponent(token)}` : ''}`);
       ws.onopen = () => { attempts = 0; setStatus('live'); };
       ws.onmessage = (m) => {
         try {

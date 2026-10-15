@@ -2,8 +2,10 @@
 package server
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -26,6 +28,7 @@ type Server struct {
 	alerts  *Alerts
 	bans    *Bans
 	token   string
+	limiter *failLimiter
 	started time.Time
 
 	cacheMu sync.Mutex
@@ -40,7 +43,7 @@ type cached struct {
 }
 
 func New(st *store.Store, g *geo.Resolver) *Server {
-	s := &Server{st: st, geo: g, token: os.Getenv("DASH_TOKEN"), started: time.Now(), cache: map[string]cached{}}
+	s := &Server{st: st, geo: g, token: os.Getenv("DASH_TOKEN"), started: time.Now(), cache: map[string]cached{}, limiter: &failLimiter{m: map[string][]time.Time{}}}
 	s.bans = newBans(st.Persister())
 	s.alerts = newAlerts(st.Persister())
 	return s
@@ -82,9 +85,9 @@ func (s *Server) dataset(p analytics.Params, offset time.Duration) *analytics.Da
 	ds := analytics.Build(p, from, to, s.st.Range(from, to, p.Sensor))
 	s.cacheMu.Lock()
 	s.cache[key] = cached{ds, ver, time.Now()}
-	if len(s.cache) > 64 {
+	if len(s.cache) > 8 { // datasets are large; keep only the freshest few
 		for k, v := range s.cache {
-			if time.Since(v.at) > time.Minute {
+			if time.Since(v.at) > 20*time.Second {
 				delete(s.cache, k)
 			}
 		}
@@ -116,18 +119,78 @@ func fail(w http.ResponseWriter, status int, msg string) {
 	respond(w, status, map[string]string{"error": msg})
 }
 
-// writeGuard protects mutating endpoints when DASH_TOKEN is configured.
-func (s *Server) writeGuard(next http.Handler) http.Handler {
+// guard enforces DASH_TOKEN. When a token is configured every API call and the
+// live stream require it, except the endpoints machines depend on: health,
+// ingest from sensors, and the ban list polled by xdp-shield.
+func (s *Server) guard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if s.token != "" && r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions &&
-			!strings.HasPrefix(r.URL.Path, "/api/ingest/") {
-			if r.Header.Get("Authorization") != "Bearer "+s.token {
-				fail(w, http.StatusUnauthorized, "unauthorized")
-				return
-			}
+		if s.token == "" {
+			next.ServeHTTP(w, r)
+			return
 		}
-		next.ServeHTTP(w, r)
+		p := r.URL.Path
+		open := !strings.HasPrefix(p, "/api") && p != "/ws" ||
+			p == "/api/health" || p == "/api/auth" || strings.HasPrefix(p, "/api/ingest/") ||
+			(p == "/api/threats/banned" && r.Method == http.MethodGet)
+		if open || s.tokenOK(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if !s.limiter.allow(r.RemoteAddr) {
+			fail(w, http.StatusTooManyRequests, "too many failed attempts")
+			return
+		}
+		s.limiter.fail(r.RemoteAddr)
+		fail(w, http.StatusUnauthorized, "unauthorized")
 	})
+}
+
+func (s *Server) tokenOK(r *http.Request) bool {
+	got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if got == "" && r.URL.Path == "/ws" {
+		got = r.URL.Query().Get("token") // browsers cannot set headers on WebSockets
+	}
+	return got != "" && subtle.ConstantTimeCompare([]byte(got), []byte(s.token)) == 1
+}
+
+// failLimiter blocks an address after repeated bad tokens (10 per minute).
+type failLimiter struct {
+	mu sync.Mutex
+	m  map[string][]time.Time
+}
+
+func (l *failLimiter) key(addr string) string {
+	if h, _, err := net.SplitHostPort(addr); err == nil {
+		return h
+	}
+	return addr
+}
+
+func (l *failLimiter) recent(k string) []time.Time {
+	cut := time.Now().Add(-time.Minute)
+	var keep []time.Time
+	for _, t := range l.m[k] {
+		if t.After(cut) {
+			keep = append(keep, t)
+		}
+	}
+	return keep
+}
+
+func (l *failLimiter) allow(addr string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return len(l.recent(l.key(addr))) < 10
+}
+
+func (l *failLimiter) fail(addr string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	k := l.key(addr)
+	l.m[k] = append(l.recent(k), time.Now())
+	if len(l.m) > 10000 {
+		l.m = map[string][]time.Time{}
+	}
 }
 
 func (s *Server) Routes() http.Handler {
@@ -141,7 +204,7 @@ func (s *Server) Routes() http.Handler {
 		AllowedHeaders: []string{"Accept", "Authorization", "Content-Type"},
 		MaxAge:         300,
 	}))
-	r.Use(s.writeGuard)
+	r.Use(s.guard)
 
 	r.Get("/ws", s.handleWS)
 	r.Route("/api", func(r chi.Router) {

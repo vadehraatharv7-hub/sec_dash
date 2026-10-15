@@ -4,7 +4,7 @@ import {
   Search, Server, ShieldBan, Terminal, TerminalSquare, Wifi, WifiOff,
 } from 'lucide-react';
 import { FilterProvider, go, useApi, useFilters, useLive, useRoute } from './lib/hooks';
-import { getToken, setToken } from './lib/api';
+import { api, setToken } from './lib/api';
 import { UiCtx } from './lib/ui';
 import { RANGES } from './lib/theme';
 import { Segmented, Select, cx } from './ui/primitives';
@@ -135,36 +135,52 @@ function GlobalSearch({ openIP }) {
   );
 }
 
-function AuthBanner() {
-  const { data } = useApi('/auth', null, { filters: false });
-  const [token, setTok] = useState(getToken());
-  const [asking, setAsking] = useState(false);
+function Login({ onDone, bad }) {
   const [val, setVal] = useState('');
-  if (!data?.required) return null;
-  const ok = data.ok;
-  const save = async (e) => {
+  const [err, setErr] = useState(bad ? 'That token was rejected.' : '');
+  const [busy, setBusy] = useState(false);
+  const submit = async (e) => {
     e.preventDefault();
+    setBusy(true); setErr('');
     setToken(val.trim());
-    setTok(val.trim());
-    setAsking(false);
-    window.location.reload();
+    try {
+      const r = await api('/auth');
+      if (r.ok) onDone(); else { setToken(''); setErr('That token was rejected.'); }
+    } catch (x) { setToken(''); setErr(x.status === 429 ? 'Too many attempts. Wait a minute.' : 'Could not reach the server.'); }
+    setBusy(false);
   };
-  if (ok && token) return null;
   return (
-    <div className="flex items-center gap-3 border-b border-med/30 bg-med/10 px-4 py-1.5 text-xs text-med">
-      <Lock size={13} />
-      <span className="flex-1">Read-only mode. Enter the access token to ban IPs and manage alerts.</span>
-      {asking ? (
-        <form onSubmit={save} className="flex gap-2">
-          <input autoFocus type="password" value={val} onChange={(e) => setVal(e.target.value)} placeholder="Access token"
-            className="h-6 rounded border border-line2 bg-panel px-2 text-ink" />
-          <button className="rounded bg-med px-2 text-[#1a1400] font-medium">Unlock</button>
-        </form>
-      ) : (
-        <button onClick={() => setAsking(true)} className="underline underline-offset-2">Enter token</button>
-      )}
+    <div className="min-h-full grid place-items-center px-4">
+      <form onSubmit={submit} className="w-full max-w-sm rounded-2xl border border-line bg-panel p-6 space-y-4">
+        <div className="flex items-center gap-3">
+          <img src="/icon.svg" alt="" className="h-9 w-9 rounded-lg" />
+          <div><div className="font-semibold">SecDash</div><div className="text-xs text-mute">Honeypot analytics</div></div>
+        </div>
+        <label className="block text-xs text-mute">Access token
+          <input autoFocus type="password" value={val} onChange={(e) => setVal(e.target.value)} required
+            className="mt-1.5 h-9 w-full rounded-lg border border-line bg-bg px-3 text-[14px] text-ink focus:border-accent/60 focus:outline-none" />
+        </label>
+        {err && <p className="text-xs text-crit" role="alert">{err}</p>}
+        <button disabled={busy || !val} className="h-9 w-full rounded-lg bg-accent font-semibold text-[#04201d] hover:brightness-110 disabled:opacity-50">
+          <Lock size={14} className="inline -mt-0.5 mr-1.5" />Unlock
+        </button>
+      </form>
     </div>
   );
+}
+
+function Gate() {
+  const [state, setState] = useState('checking'); // checking | locked | open
+  const check = () => api('/auth').then((r) => setState(r.required && !r.ok ? 'locked' : 'open')).catch(() => setState('open'));
+  useEffect(() => {
+    check();
+    const lock = () => { setToken(''); setState('locked'); };
+    window.addEventListener('secdash:unauthorized', lock);
+    return () => window.removeEventListener('secdash:unauthorized', lock);
+  }, []);
+  if (state === 'checking') return null;
+  if (state === 'locked') return <Login onDone={() => setState('open')} />;
+  return <Shell />;
 }
 
 function Shell() {
@@ -197,7 +213,6 @@ function Shell() {
           </div>
         )}
         <div className="flex-1 min-w-0 flex flex-col">
-          <AuthBanner />
           <header className="flex items-center gap-2.5 h-14 shrink-0 border-b border-line px-4 bg-bg/80 backdrop-blur sticky top-0 z-30">
             <button className="lg:hidden text-mute hover:text-ink -ml-1 p-1" onClick={() => setOpen(true)} aria-label="Open menu"><Menu size={20} /></button>
             <GlobalSearch openIP={setIP} />
@@ -224,7 +239,7 @@ function Shell() {
 export default function App() {
   return (
     <FilterProvider>
-      <Shell />
+      <Gate />
     </FilterProvider>
   );
 }

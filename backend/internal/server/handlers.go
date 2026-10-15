@@ -33,7 +33,14 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
-	ok := s.token == "" || r.Header.Get("Authorization") == "Bearer "+s.token
+	ok := s.token == "" || s.tokenOK(r)
+	if !ok && r.Header.Get("Authorization") != "" { // a wrong token counts toward the lockout
+		if !s.limiter.allow(r.RemoteAddr) {
+			fail(w, http.StatusTooManyRequests, "too many failed attempts")
+			return
+		}
+		s.limiter.fail(r.RemoteAddr)
+	}
 	respond(w, http.StatusOK, map[string]bool{"required": s.token != "", "ok": ok})
 }
 

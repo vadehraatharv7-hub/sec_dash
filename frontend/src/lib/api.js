@@ -31,6 +31,7 @@ export async function api(path, { params, method = 'GET', body, signal } = {}) {
   const res = await fetch(`/api${path}${qs(params)}`, {
     method, headers, signal, body: body !== undefined ? JSON.stringify(body) : undefined,
   });
+  if (res.status === 401 && token) window.dispatchEvent(new Event('secdash:unauthorized'));
   if (!res.ok) {
     let msg = res.statusText;
     try { msg = (await res.json()).error || msg; } catch { /* not json */ }
