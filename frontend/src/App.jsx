@@ -140,6 +140,14 @@ export default function App() {
       (newEvent) => {
         setEvents((prev) => [newEvent, ...prev.slice(0, 149)]);
 
+        // Surface a sensor as soon as its first live event arrives
+        const sid = newEvent.sensor_id || 'vm-honeypot';
+        setSensors((prev) =>
+          prev.some((s) => s.sensor_id === sid)
+            ? prev
+            : [...prev, { sensor_id: sid, event_count: 1 }]
+        );
+
         // Live KPI increment
         setStats((prev) => {
           if (!prev) return prev;
@@ -163,6 +171,7 @@ export default function App() {
 
     // Refresh metrics periodically
     const interval = setInterval(() => {
+      fetchSensors().then((sen) => setSensors(sen || [])).catch(() => {});
       fetchOverviewStats().then((s) => setStats(s)).catch(() => {});
       fetchTimeline(24).then((t) => setTimeline(t || [])).catch(() => {});
       fetchTopCountries(15).then((c) => setCountries(c || [])).catch(() => {});
