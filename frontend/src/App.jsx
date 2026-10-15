@@ -47,6 +47,7 @@ export default function App() {
   const [countries, setCountries] = useState([]);
   const [credentials, setCredentials] = useState([]);
   const [topIPs, setTopIPs] = useState([]);
+  const [topIPsError, setTopIPsError] = useState(null);
   const [commands, setCommands] = useState([]);
   const [events, setEvents] = useState([]);
   const [sessions, setSessions] = useState([]);
@@ -59,6 +60,21 @@ export default function App() {
     fetchEvents({ limit: 80, sensor: selectedSensor === 'all' ? '' : selectedSensor })
       .then(res => setEvents(res || []))
       .catch(e => console.error("Failed to fetch events:", e));
+  }, [selectedSensor]);
+
+  // Top attacker IPs for the selected sensor, refreshed periodically
+  useEffect(() => {
+    const sensor = selectedSensor === 'all' ? '' : selectedSensor;
+    const load = () =>
+      fetchTopIPs(7, sensor)
+        .then((ips) => {
+          setTopIPs(Array.isArray(ips) ? ips : []);
+          setTopIPsError(null);
+        })
+        .catch((err) => setTopIPsError(err.message || 'request failed'));
+    load();
+    const id = setInterval(load, 30000);
+    return () => clearInterval(id);
   }, [selectedSensor]);
 
   // PWA Install Prompt Listener
@@ -90,7 +106,6 @@ export default function App() {
         timelineData,
         countryData,
         credData,
-        ipData,
         cmdData,
                 sessionData,
         malwareData,
@@ -99,7 +114,6 @@ export default function App() {
         fetchTimeline(24),
         fetchTopCountries(15),
         fetchTopCredentials(25),
-        fetchTopIPs(7),
         fetchTopCommands(20),
         fetchSessions(40),
         fetchMalwareFiles(40),
@@ -110,7 +124,6 @@ export default function App() {
       if (timelineData.status === 'fulfilled') setTimeline(timelineData.value || []);
       if (countryData.status === 'fulfilled') setCountries(countryData.value || []);
       if (credData.status === 'fulfilled') setCredentials(credData.value || []);
-      if (ipData && ipData.status === 'fulfilled') setTopIPs(ipData.value || []);
       if (cmdData && cmdData.status === 'fulfilled') setCommands(cmdData.value || []);
             if (sessionData.status === 'fulfilled') setSessions(sessionData.value || []);
       if (malwareData.status === 'fulfilled') setMalwareFiles(malwareData.value || []);
@@ -237,7 +250,7 @@ export default function App() {
 
               {/* Right 1 Col: Recurrent Threat Actors */}
               <div className="lg:col-span-1">
-                <TopIPs ips={topIPs} onSelectIP={setSelectedIP} />
+                <TopIPs ips={topIPs} error={topIPsError} onSelectIP={setSelectedIP} />
               </div>
             </div>
           </div>

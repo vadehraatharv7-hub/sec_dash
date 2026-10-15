@@ -634,14 +634,26 @@ type IPStat struct {
 	CountryCode string `bson:"country_code" json:"country_code"`
 }
 
-func (s *Storage) GetTopIPs(limit int) ([]IPStat, error) {
+func (s *Storage) GetTopIPs(limit int, sensor string) ([]IPStat, error) {
 	ctx := context.Background()
+	match := bson.M{}
+	if sensor != "" && sensor != "all" {
+		if sensor == "vm-honeypot" {
+			// Legacy events were stored without a sensor ID
+			match["sensor_id"] = bson.M{"$in": []interface{}{"vm-honeypot", "", nil}}
+		} else {
+			match["sensor_id"] = sensor
+		}
+	}
 	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: match}},
 		{{Key: "$group", Value: bson.M{
 			"_id":          bson.M{"$ifNull": []interface{}{"$src_ip", "$sourceip"}},
 			"count":        bson.M{"$sum": 1},
 			"country_code": bson.M{"$first": "$geo.country_code"},
 		}}},
+		// Skip events that carry no source IP
+		{{Key: "$match", Value: bson.M{"_id": bson.M{"$nin": []interface{}{nil, ""}}}}},
 		{{Key: "$sort", Value: bson.M{"count": -1}}},
 		{{Key: "$limit", Value: limit}},
 	}

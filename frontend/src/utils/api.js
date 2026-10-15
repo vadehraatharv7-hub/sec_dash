@@ -240,8 +240,10 @@ export async function unbanIP(ip) {
   return true;
 }
 
-export async function fetchTopIPs(limit = 10) {
-  const res = await fetch(`${API_BASE}/stats/ips?limit=${limit}`);
+export async function fetchTopIPs(limit = 10, sensor = '') {
+  const params = new URLSearchParams({ limit });
+  if (sensor) params.set('sensor', sensor);
+  const res = await fetch(`${API_BASE}/stats/ips?${params}`);
   if (!res.ok) throw new Error('Failed to fetch top IPs');
   return res.json();
 }

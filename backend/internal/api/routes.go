@@ -774,7 +774,7 @@ func (s *Server) handleGetTopIPs(w http.ResponseWriter, r *http.Request) {
 			limit = l
 		}
 	}
-	ips, err := s.storage.GetTopIPs(limit)
+	ips, err := s.storage.GetTopIPs(limit, r.URL.Query().Get("sensor"))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

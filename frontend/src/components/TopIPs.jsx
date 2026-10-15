@@ -1,8 +1,19 @@
 import React from 'react';
 import { Target } from 'lucide-react';
 
-export default function TopIPs({ ips = [], onSelectIP }) {
-  if (!ips || ips.length === 0) return null;
+export default function TopIPs({ ips = [], error = null, onSelectIP }) {
+  if (error || !ips || ips.length === 0) {
+    return (
+      <div className="bg-[#0b1120] border border-slate-800 rounded-lg p-5">
+        <h2 className="text-sm font-mono font-bold text-rose-400 flex items-center gap-2 mb-4">
+          <Target className="h-4 w-4" /> RECURRENT THREAT ACTORS
+        </h2>
+        <p className={`text-xs font-mono ${error ? 'text-amber-400' : 'text-slate-500'}`}>
+          {error ? `Failed to load top IPs: ${error}` : 'No attacker data yet.'}
+        </p>
+      </div>
+    );
+  }
 
   const maxCount = Math.max(...ips.map(ip => ip.count), 1);
 
