@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"bytes"
+	"crypto/subtle"
 	"encoding/json"
 	"io"
 	"log"
@@ -15,6 +16,19 @@ import (
 // handleIngest accepts a JSON object, JSON array or NDJSON of honeypot events
 // (the format emitted by Vector, Cowrie and the Snare forwarder).
 func (s *Server) handleIngest(w http.ResponseWriter, r *http.Request) {
+	// A shared secret keeps a compromised host in a sensor subnet from injecting fake events.
+	if s.ingestKey != "" {
+		got := r.Header.Get("X-Ingest-Key")
+		if subtle.ConstantTimeCompare([]byte(got), []byte(s.ingestKey)) != 1 {
+			if !s.limiter.allow(r.RemoteAddr) {
+				fail(w, http.StatusTooManyRequests, "too many failed attempts")
+				return
+			}
+			s.limiter.fail(r.RemoteAddr)
+			fail(w, http.StatusUnauthorized, "invalid ingest key")
+			return
+		}
+	}
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 8<<20))
 	if err != nil {
 		fail(w, http.StatusRequestEntityTooLarge, "body too large")

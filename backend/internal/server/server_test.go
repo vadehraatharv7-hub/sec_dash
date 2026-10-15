@@ -197,3 +197,28 @@ func TestLoginLockout(t *testing.T) {
 		t.Fatalf("expected 429 after repeated failures, got %d", last)
 	}
 }
+
+func TestIngestKey(t *testing.T) {
+	srv := New(store.New(store.NewMemory(), 100), geo.New())
+	srv.ingestKey = "sensor-secret"
+	h := srv.Routes()
+	body := `{"eventid":"cowrie.session.connect","src_ip":"198.51.100.5"}`
+	post := func(key string) int {
+		req := httptest.NewRequest("POST", "/api/ingest/stream", strings.NewReader(body))
+		if key != "" {
+			req.Header.Set("X-Ingest-Key", key)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if post("") != http.StatusUnauthorized || post("wrong") != http.StatusUnauthorized {
+		t.Fatal("ingest without the shared key must be refused")
+	}
+	if post("sensor-secret") != http.StatusAccepted {
+		t.Fatal("ingest with the key must be accepted")
+	}
+	if srv.st.Len() != 1 {
+		t.Fatalf("only the authorised event should be stored, have %d", srv.st.Len())
+	}
+}

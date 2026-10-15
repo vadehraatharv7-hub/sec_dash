@@ -52,6 +52,7 @@ make demo        # synthetic attack traffic, no database needed -> http://localh
 | `GEO_ONLINE` | on | Set `0` to disable the online IP-location fallback (ip-api.com batch endpoint; sends attacker IPs to that service) |
 | `GEOIP_CITY_DB`, `GEOIP_ASN_DB` | auto | Path to MaxMind-format `.mmdb` files (GeoLite2 or DB-IP). Preferred over the online fallback |
 | `DASH_ADMIN_USER`, `DASH_ADMIN_PASSWORD` | unset | Creates (or resets) a dashboard admin account at startup; password min. 8 chars, stored bcrypt-hashed. With any account present the dashboard shows a username/password login and issues 12-hour signed session tokens |
+| `INGEST_TOKEN` | unset | If set, `POST /api/ingest/stream` requires the header `X-Ingest-Key: <token>`. Stops a compromised host in a sensor subnet from injecting fake events |
 | `DASH_TOKEN` | unset | If set, the dashboard shows a login screen and every API call and the live stream require the token (`Authorization: Bearer`). Still open: `/api/health`, sensor ingest, and `GET /api/threats/banned` (xdp-shield polls it without a token). Ten wrong tokens in a minute lock the address out for a minute |
 | `DEMO` | unset | `1` seeds ~10 days of synthetic traffic |
 

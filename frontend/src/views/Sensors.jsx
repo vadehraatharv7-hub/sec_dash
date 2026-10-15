@@ -40,6 +40,7 @@ function AddSensor() {
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const snippet = `curl -X POST "${origin}/api/ingest/stream?sensor=my-sensor" \\
   -H "Content-Type: application/json" \\
+  -H "X-Ingest-Key: <ingest key, if INGEST_TOKEN is set>" \\
   -d '{"eventid":"cowrie.login.failed","src_ip":"203.0.113.9","username":"root","password":"123456","timestamp":"'"$(date -u +%FT%TZ)"'"}'`;
   return (
     <Card>

@@ -24,14 +24,15 @@ import (
 )
 
 type Server struct {
-	st      *store.Store
-	geo     *geo.Resolver
-	alerts  *Alerts
-	bans    *Bans
-	token   string
-	limiter *failLimiter
-	auth    *auth.Manager
-	started time.Time
+	st        *store.Store
+	geo       *geo.Resolver
+	alerts    *Alerts
+	bans      *Bans
+	token     string
+	ingestKey string
+	limiter   *failLimiter
+	auth      *auth.Manager
+	started   time.Time
 
 	cacheMu sync.Mutex
 	buildMu sync.Mutex // serializes rebuilds so concurrent requests share one result
@@ -45,7 +46,7 @@ type cached struct {
 }
 
 func New(st *store.Store, g *geo.Resolver) *Server {
-	s := &Server{st: st, geo: g, token: os.Getenv("DASH_TOKEN"), started: time.Now(), cache: map[string]cached{}, limiter: &failLimiter{m: map[string][]time.Time{}}}
+	s := &Server{st: st, geo: g, token: os.Getenv("DASH_TOKEN"), ingestKey: os.Getenv("INGEST_TOKEN"), started: time.Now(), cache: map[string]cached{}, limiter: &failLimiter{m: map[string][]time.Time{}}}
 	s.auth = auth.New(st.Persister())
 	s.bans = newBans(st.Persister())
 	s.alerts = newAlerts(st.Persister())
