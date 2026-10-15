@@ -81,7 +81,8 @@ func (d *Dataset) Credentials(limit int) *Credentials {
 			a.last = e.Time
 		}
 	}
-	c := &Credentials{Styles: map[string]int{}}
+	c := &Credentials{Styles: map[string]int{}, Usernames: []CredStat{}, Passwords: []CredStat{}, Pairs: []PairStat{},
+		Successful: []PairStat{}, Lengths: []LenBucket{}, TopSources: []*Attacker{}}
 	def := 0
 	lens := map[string]int{}
 	for _, e := range d.Events {
@@ -132,6 +133,12 @@ func (d *Dataset) Credentials(limit int) *Credentials {
 		return out
 	}
 	c.Usernames, c.Passwords = conv(users), conv(pwds)
+	if c.Usernames == nil {
+		c.Usernames = []CredStat{}
+	}
+	if c.Passwords == nil {
+		c.Passwords = []CredStat{}
+	}
 	for k, a := range pairs {
 		u, p, _ := strings.Cut(k, "\x00")
 		ps := PairStat{u, p, a.n, len(a.ips), a.succ, defaultCreds[strings.ToLower(u)+":"+p], a.last}
@@ -198,7 +205,7 @@ func (d *Dataset) Commands(limit int) *Commands {
 		last   time.Time
 	}
 	m := map[string]*acc{}
-	out := &Commands{Categories: map[string]int{}}
+	out := &Commands{Categories: map[string]int{}, Top: []CmdStat{}, Playbooks: []Playbook{}}
 	for _, e := range d.Events {
 		if e.Kind != model.KindCommand {
 			continue
@@ -492,7 +499,7 @@ func Sensors(all []*model.Event, known map[string]string, now time.Time) []Senso
 	cnt := map[string]map[string]int{}
 	cname := map[string]map[string]string{}
 	for id, src := range known {
-		byS[id] = &SensorInfo{ID: id, Source: src, Spark: make([]int, 24), Kinds: map[string]int{}}
+		byS[id] = &SensorInfo{ID: id, Source: src, Spark: make([]int, 24), Kinds: map[string]int{}, Countries: []CountryStat{}}
 		ips[id] = map[string]bool{}
 		cnt[id] = map[string]int{}
 		cname[id] = map[string]string{}
@@ -562,7 +569,7 @@ type IOC struct {
 }
 
 func (d *Dataset) IOCs(minRisk int) []IOC {
-	var out []IOC
+	out := []IOC{}
 	for _, a := range d.Attackers {
 		if a.Risk >= minRisk {
 			ctx := a.Class

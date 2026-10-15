@@ -321,7 +321,7 @@ func BuildOverview(d, prev *Dataset, sensors []string) *Overview {
 	if len(d.Attackers) < n {
 		n = len(d.Attackers)
 	}
-	o.TopAttackers = d.Attackers[:n]
+	o.TopAttackers = append([]*Attacker{}, d.Attackers[:n]...)
 	o.Insights = d.Insights(tl)
 	return o
 }

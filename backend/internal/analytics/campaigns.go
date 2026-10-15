@@ -115,7 +115,7 @@ func (d *Dataset) buildCampaigns() {
 			continue
 		}
 		sort.Strings(ips)
-		c := &Campaign{IPs: ips, Attackers: len(ips)}
+		c := &Campaign{IPs: ips, Attackers: len(ips), Playbooks: []Playbook{}, Techniques: []intel.Technique{}}
 		ipSet := map[string]bool{}
 		for _, ip := range ips {
 			ipSet[ip] = true

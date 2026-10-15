@@ -38,7 +38,7 @@ export default function Commands() {
               </Table>
             </Card>
           </div>
-          {data.playbooks.length > 0 && (
+          {data.playbooks?.length > 0 && (
             <Card>
               <CardHeader title="Recurring playbooks" sub="Identical command sequences reused across sessions - the signature of automated tooling" />
               <div className="px-4 pb-4 grid gap-3 lg:grid-cols-2">

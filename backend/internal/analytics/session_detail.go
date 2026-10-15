@@ -57,7 +57,7 @@ func (d *Dataset) SessionDetail(id string) *SessionDetail {
 	if s == nil {
 		return nil
 	}
-	det := &SessionDetail{Session: s, Attacker: d.attByIP[s.IP]}
+	det := &SessionDetail{Session: s, Attacker: d.attByIP[s.IP], Timeline: []TimelineItem{}}
 	var cmds []string
 	var tr strings.Builder
 	catsSeen := map[string]bool{}
@@ -103,6 +103,9 @@ func (d *Dataset) SessionDetail(id string) *SessionDetail {
 			it.Text = e.RawType
 		}
 		det.Timeline = append(det.Timeline, it)
+	}
+	if cmds == nil {
+		cmds = []string{}
 	}
 	det.Commands = cmds
 	det.Transcript = tr.String()
@@ -256,7 +259,7 @@ func (d *Dataset) AttackerDetail(ip string) *AttackerDetail {
 	if a == nil {
 		return nil
 	}
-	det := &AttackerDetail{Attacker: a}
+	det := &AttackerDetail{Attacker: a, Sessions: []*Session{}, Credentials: []PairStat{}, Commands: []CmdStat{}, Paths: []CredStat{}}
 	for _, s := range d.Sessions {
 		if s.IP == ip {
 			det.Sessions = append(det.Sessions, s)

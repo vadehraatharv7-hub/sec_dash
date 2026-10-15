@@ -42,7 +42,7 @@ func (s *Server) handleMeta(w http.ResponseWriter, r *http.Request) {
 		ID     string `json:"id"`
 		Source string `json:"source"`
 	}
-	var ss []sensor
+	ss := []sensor{}
 	for id, src := range s.st.Sensors() {
 		ss = append(ss, sensor{id, src})
 	}
@@ -60,7 +60,7 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 	if dur := analytics.RangeDuration(p.Range); dur > 0 {
 		prev = s.dataset(p, dur)
 	}
-	var sensors []string
+	sensors := []string{}
 	for id := range s.st.Sensors() {
 		sensors = append(sensors, id)
 	}

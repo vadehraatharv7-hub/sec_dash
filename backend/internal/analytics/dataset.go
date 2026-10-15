@@ -263,6 +263,9 @@ func (d *Dataset) buildSessions() {
 			addT(intel.T1595)
 		}
 		intel.SortTechniques(allTechs)
+		if allTechs == nil {
+			allTechs = []intel.Technique{}
+		}
 		s.Techniques = allTechs
 		for f := range fams {
 			s.Families = append(s.Families, f)
@@ -378,6 +381,7 @@ func (d *Dataset) buildAttackers() {
 			a.Style = "low-volume guessing"
 		}
 		a.Sensors = sortedKeys(a.sens)
+		a.Ports, a.Techniques = []int{}, []intel.Technique{}
 		for p := range a.ports {
 			a.Ports = append(a.Ports, p)
 		}
