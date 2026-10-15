@@ -1,35 +1,34 @@
-.PHONY: all setup build run run-backend run-frontend clean
-
-export PATH := $(HOME)/.local/go/bin:$(HOME)/go/bin:$(PATH)
+.PHONY: all setup build test run demo dev clean
 
 all: build
 
 setup:
-	@echo "==> Setting up Go backend dependencies..."
 	cd backend && go mod download
-	@echo "==> Setting up Frontend dependencies..."
 	cd frontend && npm install
 
 build:
-	@echo "==> Building Go backend..."
-	cd backend && go build -o bin/server cmd/server/main.go
-	@echo "==> Building Frontend..."
+	cd backend && go build -o bin/server ./cmd/server
 	cd frontend && npm run build
 
-run-backend:
-	@echo "==> Running Go backend on :8080..."
-	cd backend && go run cmd/server/main.go
+test:
+	cd backend && go vet ./... && go test ./...
+	cd frontend && npm run lint
 
-run-frontend:
-	@echo "==> Running Vite React frontend on :5173..."
-	cd frontend && npm run dev
+# Production-style run: backend serves the built frontend on :8080.
+# Needs MONGO_URI (see README); without it the data is kept in memory only.
+run: build
+	cd backend && STATIC_DIR=../frontend/dist ./bin/server
 
-run:
-	@echo "==> Launching SecDash Honeypot Full Stack..."
+# Local demo with synthetic attack traffic - no database required.
+demo: build
+	cd backend && DEMO=1 GEO_ONLINE=0 PORT=8080 STATIC_DIR=../frontend/dist ./bin/server
+
+# Hot-reload UI (Vite on :5173, proxying /api and /ws to a backend on :8080).
+dev:
 	@trap 'kill 0' SIGINT SIGTERM EXIT; \
-	(cd backend && go run cmd/server/main.go) & \
+	(cd backend && DEMO=1 GEO_ONLINE=0 go run ./cmd/server) & \
 	(cd frontend && npm run dev) & \
 	wait
 
 clean:
-	rm -rf backend/bin backend/data frontend/dist
+	rm -rf backend/bin frontend/dist

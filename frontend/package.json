@@ -1,5 +1,5 @@
 {
-  "name": "frontend",
+  "name": "secdash-frontend",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -11,11 +11,12 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
-    "leaflet": "^1.9.4",
     "lucide-react": "^1.46.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "tailwindcss": "^4.3.3"
+    "tailwindcss": "^4.3.3",
+    "topojson-client": "^3.1.0",
+    "world-atlas": "^2.0.2"
   },
   "devDependencies": {
     "@types/react": "^19.2.18",

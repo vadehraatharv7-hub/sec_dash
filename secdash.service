@@ -1,17 +1,18 @@
 [Unit]
-Description=SecDash Honeypot Threat Operations Center (Golang Backend & PWA)
+Description=SecDash honeypot analytics
 After=network.target
 
 [Service]
 Type=simple
-User=marcos_007
-WorkingDirectory=/home/marcos_007/Documents/project/sec_dash
-ExecStart=/home/marcos_007/Documents/project/sec_dash/backend/bin/server
+User=secdash
+WorkingDirectory=/opt/secdash/backend
+ExecStart=/opt/secdash/backend/bin/server
 Restart=always
 RestartSec=5
+# MONGO_URI=..., optional DASH_TOKEN=..., GEMINI_API_KEY=... go in this file (chmod 600)
+EnvironmentFile=/etc/secdash.env
 Environment=PORT=8080
-Environment=DB_PATH=/home/marcos_007/Documents/project/sec_dash/backend/data/secdash.db
-Environment=STATIC_DIR=/home/marcos_007/Documents/project/sec_dash/frontend/dist
+Environment=STATIC_DIR=/opt/secdash/frontend/dist
 
 [Install]
 WantedBy=multi-user.target

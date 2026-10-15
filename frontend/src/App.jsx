@@ -1,341 +1,232 @@
-import React, { useState, useEffect } from 'react';
-import Navbar from './components/Navbar';
-import ProvisionHoneypot from './components/ProvisionHoneypot';
-import AccessControl from './components/AccessControl';
-import TopIPs from './components/TopIPs';
-import VelocityMetrics from './components/VelocityMetrics';
-import AttackMap from './components/AttackMap';
-import AttackTimeline from './components/AttackTimeline';
-import TerminalStream from './components/TerminalStream';
-import CredentialWall from './components/CredentialWall';
-import SessionsView from './components/SessionsView';
-import LootView from './components/LootView';
-import BotnetView from './components/BotnetView';
-import AlertsView from './components/AlertsView';
-import AlloyGuideView from './components/AlloyGuideView';
-import ThreatProfileModal from './components/ThreatProfileModal';
-
-import { 
-  fetchOverviewStats, 
-  fetchTimeline, 
-  fetchTopCountries, 
-  fetchTopCredentials, 
-  fetchTopCommands,
-  fetchTopIPs, 
-  fetchEvents, 
-  fetchSessions, 
-  fetchMalwareFiles,
-  fetchSensors, 
-  createAttackStream 
-} from './utils/api';
-
-import { 
-  Terminal, 
-  CheckCircle2
+import { useEffect, useMemo, useState } from 'react';
+import {
+  Bell, Bug, Crosshair, Globe, Grid3x3, KeyRound, LayoutDashboard, Lock, Menu, Network, Radio,
+  Search, Server, ShieldBan, Terminal, TerminalSquare, Wifi, WifiOff,
 } from 'lucide-react';
+import { FilterProvider, go, useApi, useFilters, useLive, useRoute } from './lib/hooks';
+import { getToken, setToken } from './lib/api';
+import { UiCtx } from './lib/ui';
+import { RANGES } from './lib/theme';
+import { Segmented, Select, cx } from './ui/primitives';
+import AttackerDrawer from './views/AttackerDrawer';
+import Overview from './views/Overview';
+import LiveFeed from './views/LiveFeed';
+import ThreatMap from './views/ThreatMap';
+import Attackers from './views/Attackers';
+import Sessions from './views/Sessions';
+import SessionDetail from './views/SessionDetail';
+import Campaigns from './views/Campaigns';
+import Credentials from './views/Credentials';
+import Commands from './views/Commands';
+import Malware from './views/Malware';
+import Mitre from './views/Mitre';
+import Alerts from './views/Alerts';
+import Blocklist from './views/Blocklist';
+import Sensors from './views/Sensors';
 
-export default function App() {
-  const [activeTab, setActiveTab] = useState('overview');
-  const [wsConnected, setWsConnected] = useState(false);
-  const [selectedIP, setSelectedIP] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [installPrompt, setInstallPrompt] = useState(null);
 
-  // Telemetry state
-  const [stats, setStats] = useState(null);
-  const [timeline, setTimeline] = useState([]);
-  const [countries, setCountries] = useState([]);
-  const [credentials, setCredentials] = useState([]);
-  const [topIPs, setTopIPs] = useState([]);
-  const [topIPsError, setTopIPsError] = useState(null);
-  const [commands, setCommands] = useState([]);
-  const [events, setEvents] = useState([]);
-  const [sessions, setSessions] = useState([]);
-  const [malwareFiles, setMalwareFiles] = useState([]);
-  const [sensors, setSensors] = useState([]);
-  const [selectedSensor, setSelectedSensor] = useState('all');
+const NAV = [
+  { group: 'Monitor', items: [
+    { id: '', label: 'Command Center', icon: LayoutDashboard },
+    { id: 'live', label: 'Live Feed', icon: Radio },
+    { id: 'map', label: 'Threat Map', icon: Globe },
+  ] },
+  { group: 'Investigate', items: [
+    { id: 'attackers', label: 'Attackers', icon: Crosshair },
+    { id: 'sessions', label: 'Sessions', icon: TerminalSquare },
+    { id: 'campaigns', label: 'Campaigns', icon: Network },
+    { id: 'credentials', label: 'Credentials', icon: KeyRound },
+    { id: 'commands', label: 'Commands', icon: Terminal },
+    { id: 'malware', label: 'Malware & IOCs', icon: Bug },
+  ] },
+  { group: 'Detect & Respond', items: [
+    { id: 'mitre', label: 'ATT&CK Coverage', icon: Grid3x3 },
+    { id: 'alerts', label: 'Alerts', icon: Bell },
+    { id: 'blocklist', label: 'Blocklist', icon: ShieldBan },
+  ] },
+  { group: 'Infrastructure', items: [
+    { id: 'sensors', label: 'Sensors', icon: Server },
+  ] },
+];
 
-  // Fetch events when sensor changes
-  useEffect(() => {
-    fetchEvents({ limit: 80, sensor: selectedSensor === 'all' ? '' : selectedSensor })
-      .then(res => setEvents(res || []))
-      .catch(e => console.error("Failed to fetch events:", e));
-  }, [selectedSensor]);
+const PAGES = {
+  '': Overview, live: LiveFeed, map: ThreatMap, attackers: Attackers, sessions: Sessions, campaigns: Campaigns,
+  credentials: Credentials, commands: Commands, malware: Malware, mitre: Mitre, alerts: Alerts, blocklist: Blocklist,
+  sensors: Sensors,
+};
 
-  // Top attacker IPs for the selected sensor, refreshed periodically
-  useEffect(() => {
-    const sensor = selectedSensor === 'all' ? '' : selectedSensor;
-    const load = () =>
-      fetchTopIPs(7, sensor)
-        .then((ips) => {
-          setTopIPs(Array.isArray(ips) ? ips : []);
-          setTopIPsError(null);
-        })
-        .catch((err) => setTopIPsError(err.message || 'request failed'));
-    load();
-    const id = setInterval(load, 30000);
-    return () => clearInterval(id);
-  }, [selectedSensor]);
-
-  // PWA Install Prompt Listener
-  useEffect(() => {
-    const handleBeforeInstall = (e) => {
-      e.preventDefault();
-      setInstallPrompt(e);
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
-    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
-  }, []);
-
-  const handleInstallPWA = async () => {
-    if (!installPrompt) return;
-    installPrompt.prompt();
-    const { outcome } = await installPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setInstallPrompt(null);
-    }
-  };
-
-  // Load telemetry data from Go backend
-  const loadAllData = async () => {
-    try {
-      fetchSensors().then(sen => setSensors(sen || [])).catch(() => {});
-      const [
-        overviewData,
-        timelineData,
-        countryData,
-        credData,
-        cmdData,
-                sessionData,
-        malwareData,
-      ] = await Promise.allSettled([
-        fetchOverviewStats(),
-        fetchTimeline(24),
-        fetchTopCountries(15),
-        fetchTopCredentials(25),
-        fetchTopCommands(20),
-        fetchSessions(40),
-        fetchMalwareFiles(40),
-        fetchSensors(),
-      ]);
-
-      if (overviewData.status === 'fulfilled') setStats(overviewData.value);
-      if (timelineData.status === 'fulfilled') setTimeline(timelineData.value || []);
-      if (countryData.status === 'fulfilled') setCountries(countryData.value || []);
-      if (credData.status === 'fulfilled') setCredentials(credData.value || []);
-      if (cmdData && cmdData.status === 'fulfilled') setCommands(cmdData.value || []);
-            if (sessionData.status === 'fulfilled') setSessions(sessionData.value || []);
-      if (malwareData.status === 'fulfilled') setMalwareFiles(malwareData.value || []);
-    } catch (err) {
-      console.error('Failed to load telemetry:', err);
-    }
-  };
-
-  useEffect(() => {
-    loadAllData();
-
-    // WebSocket attack stream
-    const stream = createAttackStream(
-      (newEvent) => {
-        setEvents((prev) => [newEvent, ...prev.slice(0, 149)]);
-
-        // Surface a sensor as soon as its first live event arrives
-        const sid = newEvent.sensor_id || 'vm-honeypot';
-        setSensors((prev) =>
-          prev.some((s) => s.sensor_id === sid)
-            ? prev
-            : [...prev, { sensor_id: sid, event_count: 1 }]
-        );
-
-        // Live KPI increment
-        setStats((prev) => {
-          if (!prev) return prev;
-          const next = { ...prev, total_events: (prev.total_events || 0) + 1 };
-          if (newEvent.eventid === 'cowrie.login.failed') {
-            next.failed_logins = (next.failed_logins || 0) + 1;
-          } else if (newEvent.eventid === 'cowrie.login.success') {
-            next.successful_logins = (next.successful_logins || 0) + 1;
-          } else if (newEvent.eventid === 'cowrie.command.input') {
-            next.commands_executed = (next.commands_executed || 0) + 1;
-          } else if (newEvent.eventid === 'cowrie.session.file_download') {
-            next.files_captured = (next.files_captured || 0) + 1;
-          }
-          return next;
-        });
-      },
-      (connected) => {
-        setWsConnected(connected);
-      }
-    );
-
-    // Refresh metrics periodically
-    const interval = setInterval(() => {
-      fetchSensors().then((sen) => setSensors(sen || [])).catch(() => {});
-      fetchOverviewStats().then((s) => setStats(s)).catch(() => {});
-      fetchTimeline(24).then((t) => setTimeline(t || [])).catch(() => {});
-      fetchTopCountries(15).then((c) => setCountries(c || [])).catch(() => {});
-      fetchTopCredentials(25).then((cr) => setCredentials(cr || [])).catch(() => {});
-      fetchSessions(40).then((se) => setSessions(se || [])).catch(() => {});
-      fetchMalwareFiles(40).then((mf) => setMalwareFiles(mf || [])).catch(() => {});
-    }, 30000);
-
-    return () => {
-      stream.close();
-      clearInterval(interval);
-    };
-  }, []);
-
+function Sidebar({ page, onNavigate }) {
   return (
-    <div className="min-h-screen bg-[#080d1a] text-slate-100 flex flex-col font-sans selection:bg-cyan-500/20 selection:text-cyan-200">
-      {/* Top Header Navbar */}
-      <Navbar
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        wsConnected={wsConnected}
-        onSearchIP={setSelectedIP}
-        searchTerm={searchTerm}
-        setSearchTerm={setSearchTerm}
-        installPrompt={installPrompt}
-        onInstallPWA={handleInstallPWA}
+    <nav className="flex flex-col h-full" aria-label="Main">
+      <div className="flex items-center gap-2.5 px-4 h-14 shrink-0 border-b border-line">
+        <img src="/icon.svg" alt="" className="h-7 w-7 rounded-md" />
+        <div className="leading-tight">
+          <div className="font-semibold tracking-tight">SecDash</div>
+          <div className="text-[10px] uppercase tracking-[0.14em] text-faint">Honeypot analytics</div>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto px-2.5 py-3 space-y-4">
+        {NAV.map((g) => (
+          <div key={g.group}>
+            <div className="px-2 pb-1 text-[10px] uppercase tracking-[0.14em] text-faint">{g.group}</div>
+            {g.items.map((it) => {
+              const active = page === it.id;
+              const Icon = it.icon;
+              return (
+                <a
+                  key={it.id}
+                  href={`#/${it.id}`}
+                  onClick={onNavigate}
+                  aria-current={active ? 'page' : undefined}
+                  className={cx(
+                    'flex items-center gap-2.5 rounded-lg px-2.5 h-8 text-[13px] transition-colors',
+                    active ? 'bg-raised text-ink font-medium' : 'text-mute hover:text-ink hover:bg-panel2',
+                  )}
+                >
+                  <Icon size={16} className={active ? 'text-accent' : ''} />
+                  {it.label}
+                </a>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </nav>
+  );
+}
+
+function LiveBadge({ status }) {
+  const on = status === 'live';
+  return (
+    <span
+      className={cx('hidden sm:inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border text-xs',
+        on ? 'border-ok/30 text-ok bg-ok/10' : 'border-line text-mute')}
+      title={on ? 'Receiving events in real time' : 'Reconnecting to the live stream'}
+    >
+      {on ? <Wifi size={13} /> : <WifiOff size={13} />}
+      <span className={cx('h-1.5 w-1.5 rounded-full', on ? 'bg-ok live-dot' : 'bg-faint')} />
+      {on ? 'Live' : status === 'connecting' ? 'Connecting' : 'Offline'}
+    </span>
+  );
+}
+
+function GlobalSearch({ openIP }) {
+  const [q, setQ] = useState('');
+  const submit = (e) => {
+    e.preventDefault();
+    const v = q.trim();
+    if (!v) return;
+    if (/^(\d{1,3}\.){3}\d{1,3}$/.test(v) || /^[0-9a-f:]+:[0-9a-f:]+$/i.test(v)) openIP(v);
+    else if (/^[0-9a-f]{12}$/.test(v)) go(`/sessions/${v}`);
+    else go('/live', { q: v });
+    setQ('');
+  };
+  return (
+    <form onSubmit={submit} className="relative flex-1 max-w-sm" role="search">
+      <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-faint" />
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Search IP, session, command, hash..."
+        aria-label="Global search"
+        className="h-8 w-full rounded-lg border border-line bg-panel pl-8 pr-2 text-[13px] placeholder:text-faint hover:border-line2 focus:border-accent/60 focus:outline-none"
       />
+    </form>
+  );
+}
 
-      {/* Main Content Viewport */}
-      <main className="flex-1 px-4 sm:px-6 py-6 max-w-7xl mx-auto w-full space-y-6">
-        {/* Status Line */}
-        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2 rounded-lg bg-[#0b1120] border border-slate-800 text-xs font-mono">
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              <span>{sensors.length > 0 ? `${sensors.length} ACTIVE SENSOR${sensors.length > 1 ? 'S' : ''}` : 'MULTI-SENSOR HONEYPOT ACTIVE'}</span>
-            </div>
-            {sensors.length > 0 && sensors.map(s => (
-                <span key={s.sensor_id} className="ml-2 px-1.5 py-0.5 bg-slate-800 rounded text-cyan-400 border border-slate-700 text-[10px]">
-                   {s.sensor_id} ({s.event_count})
-                </span>
-            ))}
-            <span className="text-slate-700">|</span>
-            <span className="text-slate-400">
-              Pipeline: <strong className="text-slate-200">Alloy &rarr; Golang WAL Engine</strong>
-            </span>
-            <span className="text-slate-700">|</span>
-            <span className="text-slate-400">
-              Stream: <strong className="text-cyan-400">RFC-5424 Logstream :8080/ws</strong>
-            </span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setActiveTab('alloy')}
-              className="text-cyan-400 hover:text-cyan-300 font-bold underline"
-            >
-              Alloy Guide &rarr;
-            </button>
-          </div>
-        </div>
-
-        {/* Dynamic Views */}
-        {activeTab === 'overview' && (
-          <div className="space-y-6">
-            {/* 3. Attack Velocity & Threat Counters */}
-            <VelocityMetrics stats={stats} />
-
-            {/* 5. IP Geolocation Heatmap / Radar */}
-            <AttackMap
-              countries={countries}
-              recentAttacks={events.slice(0, 15)}
-              onSelectIP={setSelectedIP}
-            />
-
-            {/* Attack Velocity Timeline */}
-            <AttackTimeline timeline={timeline} />
-
-            {/* Live Terminal & Top IPs */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Left 2 Cols: Live Terminal stream preview */}
-              <div className="lg:col-span-2">
-                <TerminalStream events={events.slice(0, 30)} sensors={sensors} selectedSensor={selectedSensor} onSelectSensor={setSelectedSensor} />
-              </div>
-
-              {/* Right 1 Col: Recurrent Threat Actors */}
-              <div className="lg:col-span-1">
-                <TopIPs ips={topIPs} error={topIPsError} onSelectIP={setSelectedIP} />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 1. The Real-Time Terminal Stream (WebSockets) */}
-        {activeTab === 'terminal' && (
-          <TerminalStream events={events} sensors={sensors} selectedSensor={selectedSensor} onSelectSensor={setSelectedSensor} />
-        )}
-
-        {/* 2. The Credential Harvesting Wall */}
-        {activeTab === 'credentials' && (
-          <CredentialWall credentials={credentials} />
-        )}
-
-        {/* 6. LLM-Powered Threat Profiling & 8. The Kill Chain Session Timeline */}
-        {activeTab === 'sessions' && (
-          <SessionsView sessions={sessions} onSelectIP={setSelectedIP} />
-        )}
-
-        {/* 4. Payload Extraction (The Loot Tab) */}
-        {activeTab === 'loot' && (
-          <LootView malwareFiles={malwareFiles} onSelectIP={setSelectedIP} />
-        )}
-
-        {/* 7. Botnet Fingerprinting (HASSH & Client Strings) */}
-        {activeTab === 'botnet' && (
-          <BotnetView />
-        )}
-
-        {/* 9. Custom Webhook Alerting Engine */}
-        {activeTab === 'alerts' && (
-          <AlertsView />
-        )}
-
-        {/* Access Control (Ban/Whitelist) */}
-        {activeTab === 'access' && (
-          <AccessControl />
-        )}
-
-        {/* Grafana Alloy Pipeline Guide */}
-        {/* Remote Honeypot Provisioning */}
-        {activeTab === 'provision' && (
-          <ProvisionHoneypot />
-        )}
-
-        {activeTab === 'alloy' && (
-          <AlloyGuideView />
-        )}
-      </main>
-
-      {/* Adversary IP Forensics Modal */}
-      {selectedIP && (
-        <ThreatProfileModal
-          ip={selectedIP}
-          onClose={() => setSelectedIP(null)}
-        />
+function AuthBanner() {
+  const { data } = useApi('/auth', null, { filters: false });
+  const [token, setTok] = useState(getToken());
+  const [asking, setAsking] = useState(false);
+  const [val, setVal] = useState('');
+  if (!data?.required) return null;
+  const ok = data.ok;
+  const save = async (e) => {
+    e.preventDefault();
+    setToken(val.trim());
+    setTok(val.trim());
+    setAsking(false);
+    window.location.reload();
+  };
+  if (ok && token) return null;
+  return (
+    <div className="flex items-center gap-3 border-b border-med/30 bg-med/10 px-4 py-1.5 text-xs text-med">
+      <Lock size={13} />
+      <span className="flex-1">Read-only mode. Enter the access token to ban IPs and manage alerts.</span>
+      {asking ? (
+        <form onSubmit={save} className="flex gap-2">
+          <input autoFocus type="password" value={val} onChange={(e) => setVal(e.target.value)} placeholder="Access token"
+            className="h-6 rounded border border-line2 bg-panel px-2 text-ink" />
+          <button className="rounded bg-med px-2 text-[#1a1400] font-medium">Unlock</button>
+        </form>
+      ) : (
+        <button onClick={() => setAsking(true)} className="underline underline-offset-2">Enter token</button>
       )}
-
-      {/* Enterprise Footer */}
-      <footer className="border-t border-slate-800/80 py-3.5 px-6 text-xs font-mono text-slate-500 bg-[#070b16]">
-        <div className="flex flex-wrap items-center justify-between gap-2 max-w-7xl mx-auto">
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-cyan-400" />
-            <span className="text-slate-300 font-bold">SecDash Multi-Sensor SOC</span>
-            <span>&bull;</span>
-            <span>Production Engine (Golang 1.27.1)</span>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <span>Storage: SQLite WAL</span>
-            <span>&bull;</span>
-            <span>Mode: <strong className="text-emerald-400">PRODUCTION</strong></span>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
+
+function Shell() {
+  const { parts } = useRoute();
+  const page = parts[0] || '';
+  const { range, setRange, sensor, setSensor } = useFilters();
+  const { data: meta } = useApi('/meta', null, { filters: false, interval: 60000 });
+  const [open, setOpen] = useState(false);
+  const [ip, setIP] = useState(null);
+  const status = useLive(() => {});
+
+  const ui = useMemo(() => ({ openIP: setIP, closeIP: () => setIP(null) }), []);
+  useEffect(() => { setOpen(false); }, [page]);
+
+  const sensors = [{ id: 'all', label: 'All sensors' }, ...(meta?.sensors || []).map((s) => ({ id: s.id, label: s.id }))];
+  const Page = page === 'sessions' && parts[1] ? SessionDetail : PAGES[page] || Overview;
+
+  return (
+    <UiCtx.Provider value={ui}>
+      <div className="flex h-full">
+        <aside className="hidden lg:block w-[220px] shrink-0 border-r border-line bg-panel/40">
+          <Sidebar page={page} onNavigate={() => {}} />
+        </aside>
+        {open && (
+          <div className="fixed inset-0 z-40 lg:hidden">
+            <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
+            <aside className="absolute left-0 top-0 h-full w-[240px] bg-bg border-r border-line2">
+              <Sidebar page={page} onNavigate={() => setOpen(false)} />
+            </aside>
+          </div>
+        )}
+        <div className="flex-1 min-w-0 flex flex-col">
+          <AuthBanner />
+          <header className="flex items-center gap-2.5 h-14 shrink-0 border-b border-line px-4 bg-bg/80 backdrop-blur sticky top-0 z-30">
+            <button className="lg:hidden text-mute hover:text-ink -ml-1 p-1" onClick={() => setOpen(true)} aria-label="Open menu"><Menu size={20} /></button>
+            <GlobalSearch openIP={setIP} />
+            <div className="flex-1" />
+            <Select aria-label="Sensor" value={sensor} onChange={setSensor} options={sensors} className="max-w-[150px]" />
+            <div className="hidden md:block"><Segmented value={range} onChange={setRange} options={RANGES} /></div>
+            <div className="md:hidden">
+              <Select aria-label="Time range" value={range} onChange={setRange} options={RANGES} />
+            </div>
+            <LiveBadge status={status} />
+          </header>
+          <main className="flex-1 overflow-y-auto">
+            <div className="mx-auto max-w-[1500px] px-4 sm:px-6 py-5">
+              <Page route={parts} />
+            </div>
+          </main>
+        </div>
+      </div>
+      <AttackerDrawer ip={ip} onClose={() => setIP(null)} />
+    </UiCtx.Provider>
+  );
+}
+
+export default function App() {
+  return (
+    <FilterProvider>
+      <Shell />
+    </FilterProvider>
+  );
+}
+
+
