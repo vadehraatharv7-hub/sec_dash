@@ -18,6 +18,7 @@ import (
 	"github.com/go-chi/cors"
 
 	"sec_dash/backend/internal/analytics"
+	"sec_dash/backend/internal/auth"
 	"sec_dash/backend/internal/geo"
 	"sec_dash/backend/internal/store"
 )
@@ -29,6 +30,7 @@ type Server struct {
 	bans    *Bans
 	token   string
 	limiter *failLimiter
+	auth    *auth.Manager
 	started time.Time
 
 	cacheMu sync.Mutex
@@ -44,6 +46,7 @@ type cached struct {
 
 func New(st *store.Store, g *geo.Resolver) *Server {
 	s := &Server{st: st, geo: g, token: os.Getenv("DASH_TOKEN"), started: time.Now(), cache: map[string]cached{}, limiter: &failLimiter{m: map[string][]time.Time{}}}
+	s.auth = auth.New(st.Persister())
 	s.bans = newBans(st.Persister())
 	s.alerts = newAlerts(st.Persister())
 	return s
@@ -124,13 +127,13 @@ func fail(w http.ResponseWriter, status int, msg string) {
 // ingest from sensors, and the ban list polled by xdp-shield.
 func (s *Server) guard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if s.token == "" {
+		if !s.authRequired() {
 			next.ServeHTTP(w, r)
 			return
 		}
 		p := r.URL.Path
 		open := !strings.HasPrefix(p, "/api") && p != "/ws" ||
-			p == "/api/health" || p == "/api/auth" || strings.HasPrefix(p, "/api/ingest/") ||
+			p == "/api/health" || p == "/api/auth" || p == "/api/login" || strings.HasPrefix(p, "/api/ingest/") ||
 			(p == "/api/threats/banned" && r.Method == http.MethodGet)
 		if open || s.tokenOK(r) {
 			next.ServeHTTP(w, r)
@@ -145,12 +148,28 @@ func (s *Server) guard(next http.Handler) http.Handler {
 	})
 }
 
+// authRequired is true once an access token is configured or any account exists.
+func (s *Server) authRequired() bool { return s.token != "" || s.auth.HasUsers() }
+
+// BootstrapAdmin creates or resets the admin account from deployment settings.
+func (s *Server) BootstrapAdmin(user, password string) error {
+	return s.auth.SetPassword(user, password, "admin")
+}
+
+// tokenOK accepts the static DASH_TOKEN (for scripts) or a signed session token.
 func (s *Server) tokenOK(r *http.Request) bool {
 	got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if got == "" && r.URL.Path == "/ws" {
 		got = r.URL.Query().Get("token") // browsers cannot set headers on WebSockets
 	}
-	return got != "" && subtle.ConstantTimeCompare([]byte(got), []byte(s.token)) == 1
+	if got == "" {
+		return false
+	}
+	if s.token != "" && subtle.ConstantTimeCompare([]byte(got), []byte(s.token)) == 1 {
+		return true
+	}
+	_, ok := s.auth.Check(got)
+	return ok
 }
 
 // failLimiter blocks an address after repeated bad tokens (10 per minute).
@@ -211,6 +230,7 @@ func (s *Server) Routes() http.Handler {
 		r.Get("/health", s.handleHealth)
 		r.Get("/meta", s.handleMeta)
 		r.Get("/auth", s.handleAuth)
+		r.Post("/login", s.handleLogin)
 
 		r.Post("/ingest/stream", s.handleIngest)
 

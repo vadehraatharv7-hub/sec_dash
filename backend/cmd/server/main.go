@@ -59,6 +59,12 @@ func main() {
 	}
 
 	srv := server.New(st, g)
+	if u, pw := os.Getenv("DASH_ADMIN_USER"), os.Getenv("DASH_ADMIN_PASSWORD"); u != "" && pw != "" {
+		if err := srv.BootstrapAdmin(u, pw); err != nil {
+			log.Fatalf("admin account: %v", err)
+		}
+		log.Printf("admin account %q ready", u)
+	}
 	httpSrv := &http.Server{Addr: ":" + port, Handler: srv.Routes(),
 		ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, IdleTimeout: 120 * time.Second}
 

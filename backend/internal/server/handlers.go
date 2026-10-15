@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"sort"
@@ -33,15 +34,47 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAuth(w http.ResponseWriter, r *http.Request) {
-	ok := s.token == "" || s.tokenOK(r)
-	if !ok && r.Header.Get("Authorization") != "" { // a wrong token counts toward the lockout
+	required := s.authRequired()
+	ok := !required || s.tokenOK(r)
+	if !ok && r.Header.Get("Authorization") != "" { // a wrong credential counts toward the lockout
 		if !s.limiter.allow(r.RemoteAddr) {
 			fail(w, http.StatusTooManyRequests, "too many failed attempts")
 			return
 		}
 		s.limiter.fail(r.RemoteAddr)
 	}
-	respond(w, http.StatusOK, map[string]bool{"required": s.token != "", "ok": ok})
+	mode := "token"
+	if s.auth.HasUsers() {
+		mode = "password"
+	}
+	user := ""
+	if ok && required {
+		user, _ = s.auth.Check(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+	}
+	respond(w, http.StatusOK, map[string]interface{}{"required": required, "ok": ok, "mode": mode, "user": user})
+}
+
+func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	if !s.limiter.allow(r.RemoteAddr) {
+		fail(w, http.StatusTooManyRequests, "too many failed attempts, wait a minute")
+		return
+	}
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<14)).Decode(&req); err != nil {
+		fail(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	u, ok := s.auth.Verify(req.Username, req.Password)
+	if !ok {
+		s.limiter.fail(r.RemoteAddr)
+		fail(w, http.StatusUnauthorized, "wrong username or password")
+		return
+	}
+	tok, exp := s.auth.Issue(u)
+	respond(w, http.StatusOK, map[string]interface{}{"token": tok, "expires": exp, "user": u.Name, "role": u.Role})
 }
 
 func (s *Server) handleMeta(w http.ResponseWriter, r *http.Request) {
@@ -55,7 +88,7 @@ func (s *Server) handleMeta(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.Slice(ss, func(i, j int) bool { return ss[i].ID < ss[j].ID })
 	respond(w, http.StatusOK, map[string]interface{}{
-		"sensors": ss, "events_in_memory": s.st.Len(), "auth_required": s.token != "",
+		"sensors": ss, "events_in_memory": s.st.Len(), "auth_required": s.authRequired(),
 		"uptime_seconds": int(time.Since(s.started).Seconds()),
 	})
 }

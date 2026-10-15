@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Bell, Bug, Crosshair, Globe, Grid3x3, KeyRound, LayoutDashboard, Lock, Menu, Network, Radio,
+  Bell, Bug, Crosshair, Globe, Grid3x3, KeyRound, LayoutDashboard, Lock, LogOut, Menu, Network, Radio,
   Search, Server, ShieldBan, Terminal, TerminalSquare, Wifi, WifiOff,
 } from 'lucide-react';
 import { FilterProvider, go, useApi, useFilters, useLive, useRoute } from './lib/hooks';
@@ -135,20 +135,32 @@ function GlobalSearch({ openIP }) {
   );
 }
 
-function Login({ onDone, bad }) {
+function Login({ mode, onDone }) {
+  const [user, setUser] = useState('');
   const [val, setVal] = useState('');
-  const [err, setErr] = useState(bad ? 'That token was rejected.' : '');
+  const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const pw = mode === 'password';
   const submit = async (e) => {
     e.preventDefault();
     setBusy(true); setErr('');
-    setToken(val.trim());
     try {
-      const r = await api('/auth');
-      if (r.ok) onDone(); else { setToken(''); setErr('That token was rejected.'); }
-    } catch (x) { setToken(''); setErr(x.status === 429 ? 'Too many attempts. Wait a minute.' : 'Could not reach the server.'); }
+      if (pw) {
+        const r = await api('/login', { method: 'POST', body: { username: user.trim(), password: val } });
+        setToken(r.token);
+      } else {
+        setToken(val.trim());
+        const r = await api('/auth');
+        if (!r.ok) { setToken(''); throw Object.assign(new Error('That token was rejected.'), { status: 401 }); }
+      }
+      onDone();
+    } catch (x) {
+      setToken('');
+      setErr(x.status === 429 ? 'Too many attempts. Wait a minute.' : x.status === 401 ? (pw ? 'Wrong username or password.' : 'That token was rejected.') : 'Could not reach the server.');
+    }
     setBusy(false);
   };
+  const field = 'mt-1.5 h-9 w-full rounded-lg border border-line bg-bg px-3 text-[14px] text-ink focus:border-accent/60 focus:outline-none';
   return (
     <div className="min-h-full grid place-items-center px-4">
       <form onSubmit={submit} className="w-full max-w-sm rounded-2xl border border-line bg-panel p-6 space-y-4">
@@ -156,13 +168,17 @@ function Login({ onDone, bad }) {
           <img src="/icon.svg" alt="" className="h-9 w-9 rounded-lg" />
           <div><div className="font-semibold">SecDash</div><div className="text-xs text-mute">Honeypot analytics</div></div>
         </div>
-        <label className="block text-xs text-mute">Access token
-          <input autoFocus type="password" value={val} onChange={(e) => setVal(e.target.value)} required
-            className="mt-1.5 h-9 w-full rounded-lg border border-line bg-bg px-3 text-[14px] text-ink focus:border-accent/60 focus:outline-none" />
+        {pw && (
+          <label className="block text-xs text-mute">Username
+            <input autoFocus autoComplete="username" value={user} onChange={(e) => setUser(e.target.value)} required className={field} />
+          </label>
+        )}
+        <label className="block text-xs text-mute">{pw ? 'Password' : 'Access token'}
+          <input autoFocus={!pw} type="password" autoComplete={pw ? 'current-password' : 'off'} value={val} onChange={(e) => setVal(e.target.value)} required className={field} />
         </label>
         {err && <p className="text-xs text-crit" role="alert">{err}</p>}
-        <button disabled={busy || !val} className="h-9 w-full rounded-lg bg-accent font-semibold text-[#04201d] hover:brightness-110 disabled:opacity-50">
-          <Lock size={14} className="inline -mt-0.5 mr-1.5" />Unlock
+        <button disabled={busy || !val || (pw && !user)} className="h-9 w-full rounded-lg bg-accent font-semibold text-[#04201d] hover:brightness-110 disabled:opacity-50">
+          <Lock size={14} className="inline -mt-0.5 mr-1.5" />Sign in
         </button>
       </form>
     </div>
@@ -170,20 +186,21 @@ function Login({ onDone, bad }) {
 }
 
 function Gate() {
-  const [state, setState] = useState('checking'); // checking | locked | open
-  const check = () => api('/auth').then((r) => setState(r.required && !r.ok ? 'locked' : 'open')).catch(() => setState('open'));
+  const [auth, setAuth] = useState(null);
+  const [locked, setLocked] = useState(false);
+  const check = () => api('/auth').then((r) => { setAuth(r); setLocked(r.required && !r.ok); }).catch(() => setAuth({ required: false, ok: true }));
   useEffect(() => {
     check();
-    const lock = () => { setToken(''); setState('locked'); };
+    const lock = () => { setToken(''); setLocked(true); };
     window.addEventListener('secdash:unauthorized', lock);
     return () => window.removeEventListener('secdash:unauthorized', lock);
   }, []);
-  if (state === 'checking') return null;
-  if (state === 'locked') return <Login onDone={() => setState('open')} />;
-  return <Shell />;
+  if (!auth) return null;
+  if (locked) return <Login mode={auth.mode} onDone={check} />;
+  return <Shell user={auth.user} canSignOut={auth.required} onSignOut={() => { setToken(''); window.location.reload(); }} />;
 }
 
-function Shell() {
+function Shell({ user, canSignOut, onSignOut }) {
   const { parts } = useRoute();
   const page = parts[0] || '';
   const { range, setRange, sensor, setSensor } = useFilters();
@@ -223,6 +240,11 @@ function Shell() {
               <Select aria-label="Time range" value={range} onChange={setRange} options={RANGES} />
             </div>
             <LiveBadge status={status} />
+            {canSignOut && (
+              <button onClick={onSignOut} title={user ? `Signed in as ${user}` : 'Sign out'} className="hidden sm:inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-line text-xs text-mute hover:text-ink hover:border-line2">
+                <LogOut size={13} />{user || 'Sign out'}
+              </button>
+            )}
           </header>
           <main className="flex-1 overflow-y-auto">
             <div className="mx-auto max-w-[1500px] px-4 sm:px-6 py-5">

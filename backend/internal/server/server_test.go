@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -122,5 +123,77 @@ func TestTokenLockoutAfterRepeatedFailures(t *testing.T) {
 	}
 	if last != http.StatusTooManyRequests {
 		t.Fatalf("expected lockout (429), got %d", last)
+	}
+}
+
+func TestAdminLoginAndSessions(t *testing.T) {
+	srv := New(store.New(store.NewMemory(), 100), geo.New())
+	if err := srv.BootstrapAdmin("admin", "correct-horse-battery"); err != nil {
+		t.Fatal(err)
+	}
+	if err := srv.BootstrapAdmin("x", "short"); err == nil {
+		t.Fatal("short passwords must be rejected")
+	}
+	h := srv.Routes()
+	post := func(body string) (int, map[string]interface{}) {
+		req := httptest.NewRequest("POST", "/api/login", strings.NewReader(body))
+		req.RemoteAddr = "198.51.100.7:1234"
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		var out map[string]interface{}
+		_ = json.Unmarshal(rec.Body.Bytes(), &out)
+		return rec.Code, out
+	}
+	get := func(path, tok string) int {
+		req := httptest.NewRequest("GET", path, nil)
+		if tok != "" {
+			req.Header.Set("Authorization", "Bearer "+tok)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	if get("/api/overview", "") != http.StatusUnauthorized {
+		t.Fatal("accounts exist, so anonymous access must be refused")
+	}
+	if code, _ := post(`{"username":"admin","password":"wrong-password"}`); code != http.StatusUnauthorized {
+		t.Fatalf("wrong password: %d", code)
+	}
+	if code, _ := post(`{"username":"nobody","password":"correct-horse-battery"}`); code != http.StatusUnauthorized {
+		t.Fatalf("unknown user: %d", code)
+	}
+	code, out := post(`{"username":"admin","password":"correct-horse-battery"}`)
+	if code != 200 {
+		t.Fatalf("login: %d", code)
+	}
+	tok, _ := out["token"].(string)
+	if get("/api/overview", tok) != 200 {
+		t.Fatal("session token should be accepted")
+	}
+	if get("/api/overview", tok+"x") != http.StatusUnauthorized {
+		t.Fatal("tampered token must be refused")
+	}
+	// an expired token with a valid signature is refused
+	exp, ok := srv.auth.Check(strings.Replace(tok, tok[strings.LastIndex(tok[:strings.LastIndex(tok, ".")], ".")+1:strings.LastIndex(tok, ".")], "1", 1))
+	if ok || exp != "" {
+		t.Fatal("edited expiry must break the signature")
+	}
+}
+
+func TestLoginLockout(t *testing.T) {
+	srv := New(store.New(store.NewMemory(), 100), geo.New())
+	_ = srv.BootstrapAdmin("admin", "correct-horse-battery")
+	h := srv.Routes()
+	var last int
+	for i := 0; i < 14; i++ {
+		req := httptest.NewRequest("POST", "/api/login", strings.NewReader(`{"username":"admin","password":"nope-nope"}`))
+		req.RemoteAddr = "203.0.113.77:9"
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		last = rec.Code
+	}
+	if last != http.StatusTooManyRequests {
+		t.Fatalf("expected 429 after repeated failures, got %d", last)
 	}
 }
