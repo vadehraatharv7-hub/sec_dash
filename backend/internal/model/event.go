@@ -1,7 +1,12 @@
 // Package model defines the normalized event schema used across SecDash.
 package model
 
-import "time"
+import (
+	"crypto/sha1"
+	"encoding/hex"
+	"strconv"
+	"time"
+)
 
 // Event kinds (normalized, sensor-independent).
 const (
@@ -76,4 +81,20 @@ type Stored struct {
 	Size     int64     `bson:"file_size,omitempty"`
 	Duration float64   `bson:"duration,omitempty"`
 	Geo      Geo       `bson:"geo"`
+}
+
+// Fingerprint identifies an event by its content. Two copies of the same event
+// (a retried insert, a re-sent batch) share a fingerprint. Time is truncated to
+// milliseconds because that is all MongoDB stores.
+func (e *Event) Fingerprint() string {
+	h := sha1.New()
+	for _, f := range []string{
+		strconv.FormatInt(e.Time.UnixMilli(), 10), e.Sensor, e.RawType, e.Session, e.IP,
+		strconv.Itoa(e.Port), strconv.Itoa(e.DstPort), e.User, e.Pass, e.Input, e.URL, e.SHA256,
+		e.Client, e.Method, e.Path, strconv.FormatFloat(e.Duration, 'f', 3, 64),
+	} {
+		h.Write([]byte(f))
+		h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil))[:24]
 }

@@ -54,3 +54,17 @@ func TestNormalizeCommandCollapsesVolatileParts(t *testing.T) {
 		t.Errorf("expected identical normalization, got %q vs %q", a, b)
 	}
 }
+
+func TestClassifyWebSeenInTheWild(t *testing.T) {
+	cases := map[string]string{
+		"/?%ADd+allow_url_include%3d1+%ADd+auto_prepend_file%3dphp://input": "PHP-CGI argument injection (CVE-2024-4577)",
+		"/cgi-bin/.%2e/.%2e/.%2e/.%2e/bin/sh":                               "Apache path traversal (CVE-2021-41773/42013)",
+		"/cgi-bin/%%32%65%%32%65/%%32%65%%32%65/bin/sh":                     "Apache path traversal (CVE-2021-41773/42013)",
+		"/vendor/phpunit/phpunit/src/Util/PHP/eval-stdin.php":               "PHPUnit RCE (CVE-2017-9841)",
+	}
+	for path, want := range cases {
+		if got, tech := ClassifyWeb(path); got != want || tech.ID != "T1190" {
+			t.Errorf("%s: got %q (%s), want %q", path, got, tech.ID, want)
+		}
+	}
+}

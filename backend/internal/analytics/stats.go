@@ -347,7 +347,7 @@ func (d *Dataset) Insights(tl []Bucket) []Insight {
 	// malware
 	hashes := map[string]bool{}
 	for _, e := range d.Events {
-		if e.SHA256 != "" {
+		if e.SHA256 != "" && (e.Kind == model.KindDownload || e.Kind == model.KindUpload) {
 			hashes[e.SHA256] = true
 		}
 	}

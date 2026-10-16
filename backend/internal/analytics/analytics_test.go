@@ -2,6 +2,7 @@ package analytics
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -84,5 +85,67 @@ func TestTimelineBucketsCoverRange(t *testing.T) {
 	}
 	if total != 2 || bs <= 0 {
 		t.Fatalf("timeline lost events: total=%d bucket=%d", total, bs)
+	}
+}
+
+func TestMultilineCommandsAreMerged(t *testing.T) {
+	cmd := func(sec int, in string) *model.Event {
+		return ev(sec, model.KindCommand, "198.51.100.30", "m1", func(e *model.Event) { e.Input = in })
+	}
+	evs := []*model.Event{
+		ev(0, model.KindLoginSuccess, "198.51.100.30", "m1", nil),
+		cmd(1, "cd /tmp; echo '-----BEGIN KEY-----"),
+		cmd(1, "b3BlbnNzaC1rZXk"),
+		cmd(1, "QyNTUxOQAAACDv-----END KEY-----' > k; chmod 600 k"),
+		cmd(2, "uname -a"),
+	}
+	ds := Build(Params{Range: "all"}, time.Time{}, time.Time{}, evs)
+	n := 0
+	var first string
+	for _, e := range ds.Events {
+		if e.Kind == model.KindCommand {
+			n++
+			if first == "" {
+				first = e.Input
+			}
+		}
+	}
+	if n != 2 || !strings.Contains(first, "b3BlbnNzaC1rZXk") || !strings.Contains(first, "chmod 600 k") {
+		t.Fatalf("want 2 commands with the key block merged, got %d: %q", n, first)
+	}
+	if evs[1].Input != "cd /tmp; echo '-----BEGIN KEY-----" {
+		t.Fatal("source events must not be modified")
+	}
+	if ds.Session("m1").Commands != 2 {
+		t.Fatalf("session should count 2 commands, has %d", ds.Session("m1").Commands)
+	}
+}
+
+func TestBalancedCommandsAreNotMerged(t *testing.T) {
+	evs := []*model.Event{
+		ev(0, model.KindCommand, "198.51.100.31", "x", func(e *model.Event) { e.Input = `echo -e "\x61\x75"` }),
+		ev(1, model.KindCommand, "198.51.100.31", "x", func(e *model.Event) { e.Input = "id" }),
+	}
+	if got := len(mergeMultiline(evs)); got != 2 {
+		t.Fatalf("balanced commands must stay separate, got %d", got)
+	}
+}
+
+func TestTTYLogHashesAreNotMalware(t *testing.T) {
+	evs := []*model.Event{
+		ev(0, model.KindClose, "198.51.100.40", "a", func(e *model.Event) { e.SHA256 = "e3b0" }), // a terminal recording
+		ev(0, model.KindClose, "198.51.100.41", "b", func(e *model.Event) { e.SHA256 = "e3b0" }),
+	}
+	ds := Build(Params{Range: "all"}, time.Time{}, time.Time{}, evs)
+	if len(ds.Campaigns()) != 0 {
+		t.Fatal("a shared terminal-recording hash must not link IPs into a campaign")
+	}
+	if m := ds.Malware(); len(m.Samples) != 0 {
+		t.Fatalf("no samples expected, got %d", len(m.Samples))
+	}
+	for _, in := range ds.Insights(nil) {
+		if strings.Contains(in.Title, "malware samples") {
+			t.Fatalf("no malware insight expected: %v", in.Title)
+		}
 	}
 }

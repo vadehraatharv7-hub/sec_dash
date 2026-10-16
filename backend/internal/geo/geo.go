@@ -29,6 +29,7 @@ type Resolver struct {
 
 	mu      sync.RWMutex
 	cache   map[string]model.Geo
+	failed  map[string]time.Time // lookups that returned nothing; retried after a while
 	pending map[string]bool
 	queue   chan string
 
@@ -54,6 +55,7 @@ func firstExisting(paths ...string) string {
 func New() *Resolver {
 	r := &Resolver{
 		cache:   map[string]model.Geo{},
+		failed:  map[string]time.Time{},
 		pending: map[string]bool{},
 		queue:   make(chan string, 4096),
 		online:  os.Getenv("GEO_ONLINE") != "0",
@@ -97,9 +99,13 @@ func (r *Resolver) Lookup(ipStr string) model.Geo {
 	}
 	r.mu.RLock()
 	g, ok := r.cache[ipStr]
+	retryAt, failed := r.failed[ipStr]
 	r.mu.RUnlock()
 	if ok {
 		return g
+	}
+	if failed && time.Now().Before(retryAt) {
+		return model.Geo{}
 	}
 
 	if r.city != nil {
@@ -217,7 +223,12 @@ func (r *Resolver) worker() {
 		}
 		for _, a := range results {
 			if a.Status != "success" {
-				r.store(a.Query, model.Geo{})
+				// Do not remember the failure forever: a rate limit or a gap in the
+				// provider's data should not leave an attacker unlocated for good.
+				r.mu.Lock()
+				r.failed[a.Query] = time.Now().Add(30 * time.Minute)
+				delete(r.pending, a.Query)
+				r.mu.Unlock()
 				continue
 			}
 			asn, _, _ := strings.Cut(a.AS, " ")

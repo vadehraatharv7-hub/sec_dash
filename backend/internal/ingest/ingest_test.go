@@ -52,3 +52,20 @@ func TestStoredRoundTripKeepsLegacyDocsReadable(t *testing.T) {
 		t.Fatalf("legacy doc not upgraded: %+v", ev)
 	}
 }
+
+func TestTTYLogHashIsNotMalware(t *testing.T) {
+	ev, _ := Normalize(map[string]interface{}{
+		"eventid": "cowrie.log.closed", "src_ip": "198.51.100.4", "shasum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", "size": float64(345),
+	}, "")
+	if ev.SHA256 != "" || ev.Size != 0 {
+		t.Fatalf("terminal recording hash must not be kept: %+v", ev)
+	}
+	dl, _ := Normalize(map[string]interface{}{"eventid": "cowrie.session.file_download", "src_ip": "198.51.100.4", "shasum": "ab", "url": "http://x/y", "size": float64(10)}, "")
+	if dl.SHA256 != "ab" || dl.Size != 10 {
+		t.Fatalf("real downloads keep their hash: %+v", dl)
+	}
+	legacy := FromStored(&model.Stored{EventID: "cowrie.log.closed", SHA256: "e3b0", IP: "198.51.100.4"})
+	if legacy.SHA256 != "" {
+		t.Fatal("legacy documents must be cleaned on load too")
+	}
+}

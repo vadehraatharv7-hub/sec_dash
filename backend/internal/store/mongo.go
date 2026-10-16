@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -52,15 +53,40 @@ func retry(attempts int, fn func() error) error {
 	return err
 }
 
+// storedDoc gives each event a deterministic _id, so inserting the same event twice
+// (a retry after a throttled batch, a re-sent batch) cannot create a second row.
+type storedDoc struct {
+	ID            string `bson:"_id"`
+	*model.Stored `bson:",inline"`
+}
+
+// onlyDuplicates reports whether every failure in err is a duplicate-key error, i.e.
+// the rows were already stored by an earlier attempt.
+func onlyDuplicates(err error) bool {
+	var bwe mongo.BulkWriteException
+	if !errors.As(err, &bwe) || bwe.WriteConcernError != nil || len(bwe.WriteErrors) == 0 {
+		return false
+	}
+	for _, we := range bwe.WriteErrors {
+		if we.Code != 11000 {
+			return false
+		}
+	}
+	return true
+}
+
 func (m *Mongo) Insert(evs []*model.Event) error {
 	docs := make([]interface{}, len(evs))
 	for i, e := range evs {
-		docs[i] = ingest.ToStored(e)
+		docs[i] = storedDoc{ID: e.Fingerprint(), Stored: ingest.ToStored(e)}
 	}
 	return retry(4, func() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 		_, err := m.db.Collection("logs").InsertMany(ctx, docs, options.InsertMany().SetOrdered(false))
+		if err != nil && onlyDuplicates(err) {
+			return nil
+		}
 		return err
 	})
 }

@@ -36,22 +36,32 @@ type Store struct {
 	subs  map[chan *model.Event]struct{}
 
 	knownSensors map[string]string // sensor -> source
+
+	seen    map[string]struct{} // fingerprints of recent events (drops re-sent duplicates)
+	seenOrd []string
 }
+
+const seenCap = 200000
 
 // New creates a store and loads recent events from the persister.
 func New(p Persister, max int) *Store {
-	s := &Store{p: p, max: max, subs: map[chan *model.Event]struct{}{}, knownSensors: map[string]string{}}
+	s := &Store{p: p, max: max, subs: map[chan *model.Event]struct{}{}, knownSensors: map[string]string{}, seen: map[string]struct{}{}}
 	if p != nil {
 		evs, err := p.Load(max)
 		if err != nil {
 			log.Printf("[store] load failed: %v", err)
 		} else {
 			sort.SliceStable(evs, func(i, j int) bool { return evs[i].Time.Before(evs[j].Time) })
-			s.events = evs
+			// Earlier versions could store an event more than once; keep one copy of each.
+			uniq := evs[:0]
 			for _, e := range evs {
-				s.knownSensors[e.Sensor] = e.Source
+				if s.remember(e) {
+					uniq = append(uniq, e)
+					s.knownSensors[e.Sensor] = e.Source
+				}
 			}
-			log.Printf("[store] loaded %d events", len(evs))
+			s.events = uniq
+			log.Printf("[store] loaded %d events (%d duplicates ignored)", len(uniq), len(evs)-len(uniq))
 		}
 	}
 	s.version.Add(1)
@@ -63,11 +73,42 @@ func (s *Store) Persister() Persister { return s.p }
 // Version changes whenever event data changes; used for cache invalidation.
 func (s *Store) Version() int64 { return s.version.Load() }
 
-// Add inserts events (sorted), persists them and notifies subscribers.
+// remember records the event's fingerprint and reports whether it is new.
+func (s *Store) remember(e *model.Event) bool {
+	fp := e.Fingerprint()
+	if _, dup := s.seen[fp]; dup {
+		return false
+	}
+	s.seen[fp] = struct{}{}
+	s.seenOrd = append(s.seenOrd, fp)
+	if len(s.seenOrd) > seenCap {
+		for _, old := range s.seenOrd[:seenCap/10] {
+			delete(s.seen, old)
+		}
+		s.seenOrd = append([]string(nil), s.seenOrd[seenCap/10:]...)
+	}
+	return true
+}
+
+// Add inserts events (sorted), persists them and notifies subscribers. Events
+// already seen (same content and millisecond) are dropped, so a sensor that
+// re-sends a batch cannot double-count.
 func (s *Store) Add(evs []*model.Event, persist bool) {
 	if len(evs) == 0 {
 		return
 	}
+	s.mu.Lock()
+	fresh := evs[:0:0]
+	for _, e := range evs {
+		if s.remember(e) {
+			fresh = append(fresh, e)
+		}
+	}
+	s.mu.Unlock()
+	if len(fresh) == 0 {
+		return
+	}
+	evs = fresh
 	s.mu.Lock()
 	for _, e := range evs {
 		n := len(s.events)

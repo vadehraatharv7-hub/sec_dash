@@ -133,6 +133,8 @@ func wrule(pat, label string, t Technique) webRule {
 
 var webRules = []webRule{
 	wrule(`\$\{jndi:|%24%7bjndi`, "Log4Shell (CVE-2021-44228)", T1190),
+	wrule(`(allow_url_include|auto_prepend_file|%ad%?d|%25ad)`, "PHP-CGI argument injection (CVE-2024-4577)", T1190),
+	wrule(`(\.%2e/|%%32%65|%2e%2e/|\.\./).*(/bin/sh|/etc/|cgi-bin)`, "Apache path traversal (CVE-2021-41773/42013)", T1190),
 	wrule(`(vendor/phpunit|eval-stdin\.php)`, "PHPUnit RCE (CVE-2017-9841)", T1190),
 	wrule(`(/cgi-bin/|\.cgi\b|/bin/sh|;\s*(wget|curl)|\|\s*sh)`, "CGI / shell injection", T1190),
 	wrule(`(\.\./|%2e%2e|/etc/passwd|/proc/self)`, "Path traversal / LFI", T1190),

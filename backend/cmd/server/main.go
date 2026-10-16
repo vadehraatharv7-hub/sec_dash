@@ -45,12 +45,16 @@ func main() {
 	st := store.New(persister, maxEvents)
 	g := geo.New()
 	g.OnResolved = st.SetGeo
-	// Back-fill locations for events stored before geolocation was available.
+	// Back-fill locations for events stored before geolocation was available, and keep
+	// retrying addresses whose lookup failed earlier.
 	go func() {
-		for _, ip := range st.IPsMissingGeo() {
-			if geoRes := g.Lookup(ip); geoRes.CountryCode != "" {
-				st.SetGeo(ip, geoRes)
+		for {
+			for _, ip := range st.IPsMissingGeo() {
+				if geoRes := g.Lookup(ip); geoRes.CountryCode != "" {
+					st.SetGeo(ip, geoRes)
+				}
 			}
+			time.Sleep(10 * time.Minute)
 		}
 	}()
 

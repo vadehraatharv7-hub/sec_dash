@@ -123,6 +123,7 @@ func (d *Dataset) Attacker(ip string) *Attacker { return d.attByIP[ip] }
 
 // Build derives sessions and attackers from an event slice.
 func Build(p Params, from, to time.Time, evs []*model.Event) *Dataset {
+	evs = mergeMultiline(evs)
 	d := &Dataset{P: p, From: from, To: to, Events: evs, sessByID: map[string]*Session{},
 		attByIP: map[string]*Attacker{}, Built: time.Now()}
 	d.buildSessions()
@@ -483,4 +484,54 @@ func minInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// needsMore reports whether a shell line is unfinished: an unclosed quote or a
+// trailing backslash. Cowrie logs every line of a pasted multi-line command as its own event.
+func needsMore(s string) bool {
+	single, double := 0, 0
+	esc := false
+	for _, r := range s {
+		switch {
+		case esc:
+			esc = false
+		case r == '\\':
+			esc = true
+		case r == '\'':
+			single++
+		case r == '"':
+			double++
+		}
+	}
+	return single%2 == 1 || double%2 == 1 || strings.HasSuffix(strings.TrimRight(s, " \t"), "\\")
+}
+
+// mergeMultiline joins the lines of one pasted command back into a single command
+// event (kept at its first line's timestamp). Other events pass through unchanged.
+func mergeMultiline(in []*model.Event) []*model.Event {
+	const maxGap = 5 * time.Second
+	out := make([]*model.Event, 0, len(in))
+	open := map[string]*model.Event{}
+	last := map[string]time.Time{}
+	for _, e := range in {
+		if e.Kind == model.KindCommand && e.Session != "" {
+			if p := open[e.Session]; p != nil && e.Time.Sub(last[e.Session]) <= maxGap {
+				p.Input += "\n" + e.Input
+				last[e.Session] = e.Time
+				if !needsMore(p.Input) {
+					delete(open, e.Session)
+				}
+				continue
+			}
+			delete(open, e.Session)
+			if needsMore(e.Input) {
+				cp := *e // never modify the stored event
+				open[e.Session], last[e.Session] = &cp, e.Time
+				out = append(out, &cp)
+				continue
+			}
+		}
+		out = append(out, e)
+	}
+	return out
 }

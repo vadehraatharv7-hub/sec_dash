@@ -91,7 +91,7 @@ func (d *Dataset) buildCampaigns() {
 			continue
 		}
 		for _, e := range s.evs {
-			if e.SHA256 != "" {
+			if e.SHA256 != "" && (e.Kind == model.KindDownload || e.Kind == model.KindUpload) {
 				link(s.IP, "h:"+e.SHA256, "payload hash")
 			}
 			if e.URL != "" {
@@ -160,7 +160,7 @@ func (d *Dataset) buildCampaigns() {
 			}
 			c.Sessions++
 			for _, e := range s.evs {
-				if e.SHA256 != "" {
+				if e.SHA256 != "" && (e.Kind == model.KindDownload || e.Kind == model.KindUpload) {
 					hashes[e.SHA256] = true
 				}
 				if e.URL != "" {

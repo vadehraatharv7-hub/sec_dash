@@ -92,6 +92,11 @@ func Normalize(p map[string]interface{}, querySensor string) (*model.Event, erro
 	}
 
 	ev.Kind = kindOf(raw)
+	// Cowrie also reports a hash for every terminal recording (cowrie.log.closed). That is
+	// not an attacker file, so only real downloads/uploads carry a hash and size.
+	if ev.Kind != model.KindDownload && ev.Kind != model.KindUpload {
+		ev.SHA256, ev.Size = "", 0
+	}
 	if ev.Source == "snare" {
 		ev.Kind = model.KindHTTP
 		ev.Method, ev.Path = parseRequestLine(ev.Input)
@@ -172,6 +177,9 @@ func FromStored(s *model.Stored) *model.Event {
 		ev.Sensor = DefaultSensor(ev.Source)
 	}
 	ev.Kind = kindOf(ev.RawType)
+	if ev.Kind != model.KindDownload && ev.Kind != model.KindUpload {
+		ev.SHA256, ev.Size = "", 0
+	}
 	if ev.Source == "snare" {
 		ev.Kind = model.KindHTTP
 		ev.Method, ev.Path = parseRequestLine(ev.Input)
