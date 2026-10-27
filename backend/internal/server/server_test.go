@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -220,5 +221,42 @@ func TestIngestKey(t *testing.T) {
 	}
 	if srv.st.Len() != 1 {
 		t.Fatalf("only the authorised event should be stored, have %d", srv.st.Len())
+	}
+}
+
+type busyDB struct {
+	*store.Memory
+	fails int
+}
+
+func (b *busyDB) Insert(evs []*model.Event) error {
+	if b.fails > 0 {
+		b.fails--
+		return errors.New("429")
+	}
+	return nil
+}
+
+func TestIngestAnswers503WhenTheDatabaseIsBusyAndAcceptsTheRetry(t *testing.T) {
+	db := &busyDB{Memory: store.NewMemory(), fails: 1}
+	srv := New(store.New(db, 100), geo.New())
+	h := srv.Routes()
+	send := func() int {
+		req := httptest.NewRequest("POST", "/api/ingest/stream", strings.NewReader(`{"eventid":"cowrie.session.connect","src_ip":"198.51.100.5","session":"x","timestamp":"2026-10-27T10:00:00Z"}`))
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if code := send(); code != http.StatusServiceUnavailable {
+		t.Fatalf("a failed database write must not be confirmed (got %d), or the sensor would drop the batch", code)
+	}
+	if srv.st.Len() != 0 {
+		t.Fatal("nothing may be stored when the write failed")
+	}
+	if code := send(); code != http.StatusAccepted {
+		t.Fatalf("the retry must be accepted, got %d", code)
+	}
+	if srv.st.Len() != 1 {
+		t.Fatalf("the retried event must be stored once, have %d", srv.st.Len())
 	}
 }

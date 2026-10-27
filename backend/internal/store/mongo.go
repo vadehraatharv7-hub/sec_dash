@@ -145,7 +145,12 @@ func (m *Mongo) Load(limit int) ([]*model.Event, error) {
 func (m *Mongo) UpdateGeo(ip string, g model.Geo) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	_, err := m.db.Collection("logs").UpdateMany(ctx, bson.M{"src_ip": ip}, bson.M{"$set": bson.M{"geo": g}})
+	// Only rows without a location: rewriting every row of a busy address costs thousands of request units.
+	filter := bson.M{"src_ip": ip, "$or": bson.A{
+		bson.M{"geo.country_code": ""},
+		bson.M{"geo.country_code": bson.M{"$exists": false}},
+	}}
+	_, err := m.db.Collection("logs").UpdateMany(ctx, filter, bson.M{"$set": bson.M{"geo": g}})
 	return err
 }
 

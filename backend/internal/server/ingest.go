@@ -70,7 +70,13 @@ func (s *Server) handleIngest(w http.ResponseWriter, r *http.Request) {
 		evs = append(evs, ev)
 	}
 	if len(evs) > 0 {
-		s.st.Add(evs, true)
+		// Persist before confirming. If the database is busy the sensor gets a 503 and sends the batch
+		// again (Vector and the Snare forwarder both retry), so a slow database delays events, never loses them.
+		if err := s.st.Add(evs, true); err != nil {
+			log.Printf("[ingest] %d events (%s) NOT stored, asking the sensor to retry: %v", len(evs), evs[0].Sensor, err)
+			fail(w, http.StatusServiceUnavailable, "database busy, retry")
+			return
+		}
 		for _, ev := range evs {
 			s.alerts.Evaluate(ev)
 		}

@@ -90,27 +90,46 @@ func (s *Store) remember(e *model.Event) bool {
 	return true
 }
 
-// Add inserts events (sorted), persists them and notifies subscribers. Events
-// already seen (same content and millisecond) are dropped, so a sensor that
-// re-sends a batch cannot double-count.
-func (s *Store) Add(evs []*model.Event, persist bool) {
+// Add stores events: it persists them first and only then makes them visible and
+// remembers them, so a failed database write leaves no trace and the caller can send the
+// same batch again. Events already seen (same content and millisecond) are dropped, so a
+// sensor that re-sends a batch cannot double-count.
+//
+// It returns an error only when persisting failed. Nothing was stored in that case.
+func (s *Store) Add(evs []*model.Event, persist bool) error {
 	if len(evs) == 0 {
-		return
+		return nil
 	}
 	s.mu.Lock()
 	fresh := evs[:0:0]
+	batch := map[string]bool{}
 	for _, e := range evs {
-		if s.remember(e) {
-			fresh = append(fresh, e)
+		fp := e.Fingerprint()
+		if _, dup := s.seen[fp]; dup || batch[fp] {
+			continue
 		}
+		batch[fp] = true
+		fresh = append(fresh, e)
 	}
 	s.mu.Unlock()
 	if len(fresh) == 0 {
-		return
+		return nil
 	}
-	evs = fresh
+
+	// The insert is idempotent (deterministic _id), so concurrent or repeated attempts are safe.
+	if persist && s.p != nil {
+		if err := s.p.Insert(fresh); err != nil {
+			return err
+		}
+	}
+
 	s.mu.Lock()
-	for _, e := range evs {
+	added := fresh[:0:0]
+	for _, e := range fresh {
+		if !s.remember(e) {
+			continue
+		}
+		added = append(added, e)
 		n := len(s.events)
 		if n == 0 || !e.Time.Before(s.events[n-1].Time) {
 			s.events = append(s.events, e)
@@ -128,14 +147,9 @@ func (s *Store) Add(evs []*model.Event, persist bool) {
 	s.mu.Unlock()
 	s.version.Add(1)
 
-	if persist && s.p != nil {
-		if err := s.p.Insert(evs); err != nil {
-			log.Printf("[store] persist failed: %v", err)
-		}
-	}
 	s.subMu.Lock()
 	for ch := range s.subs {
-		for _, e := range evs {
+		for _, e := range added {
 			select {
 			case ch <- e:
 			default:
@@ -143,6 +157,7 @@ func (s *Store) Add(evs []*model.Event, persist bool) {
 		}
 	}
 	s.subMu.Unlock()
+	return nil
 }
 
 // SetGeo applies a resolved location to every in-memory event of an IP.
